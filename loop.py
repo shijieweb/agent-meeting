@@ -42,45 +42,64 @@ except Exception:  # pragma: no cover
 SERVER = os.environ.get("AGENT_HUB_URL", "http://localhost:8000")
 # 本地缓存目录（agent_name.txt / agent_read_*.json）。
 # 默认指向内置 Agent Hub 实例；接入其它实例请用环境变量 AGENT_HUB_DATA_DIR 覆盖。
-DATA_DIR = os.environ.get(
-    "AGENT_HUB_DATA_DIR",
-    r"C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data",
-)
+# 若默认路径不存在（非作者机器），自动回退到跨平台路径 ~/.agent_hub/data，开箱即用。
+_BUILTIN_DATA_DIR = r"C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data"
+DATA_DIR = os.environ.get("AGENT_HUB_DATA_DIR", _BUILTIN_DATA_DIR)
+if not os.path.isdir(DATA_DIR):
+    DATA_DIR = os.path.join(os.path.expanduser("~"), ".agent_hub", "data")
 AGENT_NAME_FILE = os.path.join(DATA_DIR, "agent_name.txt")
 
 
-def _req(method, path, body=None, query=None, timeout=15):
+def _req(method, path, body=None, query=None, timeout=15, max_retries=3):
     """发起 HTTP 请求，返回解析后的 JSON。
 
     - body 为请求体字典（POST 用），自动序列化为 JSON；
     - query 为查询参数字典，自动做 URL 编码（agent 名含中文也不乱码）；
-    - HTTP 业务错误（4xx/5xx）直接抛出（调用方处理/退出）；
-    - 连接失败（服务端未起）抛 ConnectionError，交由拉取轮询决定重试。
+    - HTTP 业务错误：4xx 客户端错误直接抛出（参数不对，重试无用）；
+      5xx 服务端错误与连接失败会按指数退避重试（默认 3 次：1s/2s/4s）；
+    - 重试耗尽仍失败则抛出最后一次错误（ConnectionError 或 5xx HTTPError）。
     """
     url = SERVER + path
     if query:
         url += "?" + urllib.parse.urlencode(query)
     data = json.dumps(body).encode("utf-8") if body is not None else None
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method=method,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "ignore")
+    last_err = None
+    for attempt in range(max_retries):
+        req = urllib.request.Request(
+            url,
+            data=data,
+            method=method,
+            headers={"Content-Type": "application/json"},
+        )
         try:
-            detail = json.loads(detail).get("detail", detail)
-        except Exception:
-            pass
-        print("[ERR] HTTP {0}: {1}".format(e.code, detail), file=sys.stderr)
-        raise
-    except urllib.error.URLError as e:
-        raise ConnectionError("无法连接服务端 {0}: {1}".format(SERVER, e.reason))
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8")
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            # 4xx 客户端错误：参数不对，重试无用，直接抛
+            if e.code < 500:
+                detail = e.read().decode("utf-8", "ignore")
+                try:
+                    detail = json.loads(detail).get("detail", detail)
+                except Exception:
+                    pass
+                print("[ERR] HTTP {0}: {1}".format(e.code, detail), file=sys.stderr)
+                raise
+            # 5xx 服务端错误：可重试
+            last_err = e
+            print("[WARN] HTTP {0}（第 {1}/{2} 次，将退避重试）".format(
+                e.code, attempt + 1, max_retries), file=sys.stderr)
+        except urllib.error.URLError as e:
+            last_err = ConnectionError("无法连接服务端 {0}: {1}".format(SERVER, e.reason))
+            print("[WARN] 连接失败（第 {0}/{1} 次，将退避重试）".format(
+                attempt + 1, max_retries), file=sys.stderr)
+        # 指数退避（最后一次不睡）
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)
+    # 重试耗尽，抛出最后一次错误
+    if last_err is not None:
+        raise last_err
+    raise ConnectionError("请求失败：重试耗尽且无可抛出错误")
 
 
 def resolve_name(cli_name=None):

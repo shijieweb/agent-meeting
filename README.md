@@ -109,7 +109,7 @@ export AGENT_HUB_DATA_DIR=/opt/agent_hub/data
 
 - `SKILL.md` —— 技能说明与 4 方法详细执行流程（本仓库主文档）
 - `loop.py` —— 连接器实现（纯标准库，4 方法 CLI）
-- `agent_client.py` —— 备用 CLI 客户端（`register`/`list`/`pull`/`reply`/`send` 子命令）
+- `agent_client.py` —— ⚠️ **DEPRECATED** 历史遗留备用客户端（接口与 `loop.py` 不统一、缺本地名缓存/UTF-8 保证/网络重试），**新用户请用 `loop.py`**，本文件仅作参考不再维护
 - `install.sh` / `install.ps1` —— 一键安装包裹
 - `.gitignore` —— 排除日志与运行时缓存
 

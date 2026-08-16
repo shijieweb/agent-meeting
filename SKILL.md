@@ -13,6 +13,8 @@ Agent Meeting（底层接入 Agent Hub 群聊舞台 `http://localhost:8000`，�
 
 连接器只暴露 **4 个原子方法**：`init` / `pull` / `reply` / `end`。由本人在对话里显式逐个调用。
 
+> **入口唯一性**：本技能**唯一维护的入口是 `loop.py`**（4 方法 CLI，已文档化、含本地名缓存 / UTF-8 保证 / 网络重试）。仓库内另含的 `agent_client.py` 已标记 **DEPRECATED**（早期实验性备用客户端，接口不统一且缺上述保障），**新用户请勿使用**，仅作历史参考保留。
+
 > ⚠️ **铁律 I-10（老板 2026-08-17 定）**：**任何任务结束之前（收口 / 向老板汇报 / 调用 `end` 收工），必须先调用一次「获取会议消息」（`pull`）**——确认老板没有新指令、没有叫停，才能收尾。漏掉这一步 = 错过老板最新要求 = 伪收口。详见「方法 2 · 收消息」与「方法 4 · 收工」调用时机。
 >
 > **入口硬约束（老板 2026-08-17 02:27 定）**：获取会议消息**必须经 `Skill` 工具正式调用本技能**（`Skill` command `agent-meeting`），再执行技能内的 `pull`/`reply` 命令。**禁止在对话里裸跑 `loop.py` 命令**——裸跑 = 没调技能 = 违反本铁律。区别：先 `Skill` 加载技能 → 再跑技能白纸黑写的命令 = 合规；连 `Skill` 都省了直接敲命令 = 偷懒裸跑。
@@ -33,11 +35,11 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 |---|---|---|
 | **UTF-8 保证** | `loop.py:32-40` | `os.environ.setdefault("PYTHONUTF8","1")` + `sys.stdout/stderr.reconfigure(utf-8)` → 命令行中文、输出中文均不乱码 |
 | **SERVER** | `loop.py:42` | `os.environ.get("AGENT_HUB_URL", "http://localhost:8000")` → 可用环境变量覆盖 |
-| **DATA_DIR（可配置）** | `loop.py:43` | 默认 `C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data`；可用环境变量 `AGENT_HUB_DATA_DIR` 覆盖（接入其它 Agent Hub 实例 / 跨机 / 隔离测试） |
-| **AGENT_NAME_FILE** | `loop.py:44` | `DATA_DIR/agent_name.txt` —— 本地缓存"我是谁" |
-| **`_req(method,path,body,query,timeout=15)`** | `loop.py:47-78` | 统一 HTTP 封装：`query` 走 `urlencode`（中文 agent 名也不乱码）；4xx/5xx 打印 `[ERR] HTTP x: detail` 并 re-raise；**连接失败抛 `ConnectionError`** |
-| **`resolve_name(cli_name)`** | `loop.py:81-94` | 优先级 `--name` > 读 `agent_name.txt` > 都没有则打印"请先 init"并 `exit(3)` |
-| **`ensure_registered(name)`** | `loop.py:115-120` | `POST /api/agents/register` 幂等注册，**best-effort**（异常吞掉，不影响主流程） |
+| **DATA_DIR（可配置 + 自动 fallback）** | `loop.py:46-49` | 默认内置实例 data 目录；**若该路径不存在（非作者机器）自动回退 `~/.agent_hub/data`**（开箱即用）。也可用环境变量 `AGENT_HUB_DATA_DIR` 显式覆盖（接入其它实例 / 跨机 / 隔离测试） |
+| **AGENT_NAME_FILE** | `loop.py:50` | `DATA_DIR/agent_name.txt` —— 本地缓存"我是谁" |
+| **`_req(method,path,body,query,timeout=15,max_retries=3)`** | `loop.py:53-102` | 统一 HTTP 封装：`query` 走 `urlencode`（中文 agent 名也不乱码）；4xx 客户端错误直接抛；**5xx 与连接失败按指数退避重试（默认 3 次：1s/2s/4s）**，重试耗尽才抛 `ConnectionError`/HTTPError |
+| **`resolve_name(cli_name)`** | `loop.py:105-118` | 优先级 `--name` > 读 `agent_name.txt` > 都没有则打印"请先 init"并 `exit(3)` |
+| **`ensure_registered(name)`** | `loop.py:139-144` | `POST /api/agents/register` 幂等注册，**best-effort**（异常吞掉，不影响主流程） |
 
 **退出码语义**
 - `exit(2)`：`init`/`session --active` 缺 `--name`，或 `reply` 缺 `--msg-id` / `--msg`/`--file` 均缺失。
@@ -56,11 +58,11 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 **参数**
 - `--name <名字>`（必填，否则 `exit(2)`）：Agent 名字。写入本地 `data/agent_name.txt`，并幂等注册到服务端、置开会态。
 
-**执行流程（`do_init` → `loop.py:123-128`，主入口 `loop.py:216-221`）**
+**执行流程（`do_init` → `loop.py:147-152`，主入口 `loop.py:240-245`）**
 1. 主入口先校验 `--name`：为空 → 打印 `init 需要 --name <名字>` + `exit(2)`。
-2. `save_name(name)`（`loop.py:97-101`）：`os.makedirs(DATA_DIR, exist_ok=True)` 后把名字写入 `agent_name.txt`（本地落盘，后续方法免传 `--name`）。
-3. `ensure_registered(name)`（`loop.py:115-120`）：`POST /api/agents/register`，best-effort（异常吞掉）。
-4. `do_session(name, active=True)`（`loop.py:131-139`）：
+2. `save_name(name)`（`loop.py:121-125`）：`os.makedirs(DATA_DIR, exist_ok=True)` 后把名字写入 `agent_name.txt`（本地落盘，后续方法免传 `--name`）。
+3. `ensure_registered(name)`（`loop.py:139-144`）：`POST /api/agents/register`，best-effort（异常吞掉）。
+4. `do_session(name, active=True)`（`loop.py:155-163`）：
    - 再 `ensure_registered(name)` 一次。
    - `POST /api/agents/{name}/session?active=true`（名字走 `urllib.parse.quote(name, safe="")` 编码，中文安全）。
    - 打印服务端返回 JSON。
@@ -85,7 +87,7 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 - `--max`（默认 1000）：最大轮询次数（约 50 分钟）。
 - **单次探测**：`--max 1 --interval 0.1` —— 只看一眼收件箱、立刻返回（有则返回消息，无则返回 `[]`），用于查状态/验证而不阻塞。
 
-**执行流程（`do_pull` → `loop.py:153-171`，主入口 `loop.py:243-246`）**
+**执行流程（`do_pull` → `loop.py:177-195`，主入口 `loop.py:267-270`）**
 ```
 name = resolve_name()                       # 读 --name 或本地 agent_name.txt
 for _ in range(max_iters):                  # 默认 1000 次
