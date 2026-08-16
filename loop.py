@@ -205,6 +205,7 @@ def main():
         default="pull",
         choices=["init", "pull", "watch", "reply", "register", "session", "end"],
     )
+    p.add_argument("--version", action="version", version="agent-meeting 1.0.0")
     p.add_argument("--name", dest="name", help="Agent 名字（init/session 必填；其余默认读本地 agent_name.txt）")
     p.add_argument("--msg-id", dest="msg_id", help="reply 用：目标消息 id")
     p.add_argument("--msg", dest="msg", help="reply 用：直接传入文本（PYTHONUTF8=1 防命令行中文乱码）")

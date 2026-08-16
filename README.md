@@ -93,6 +93,8 @@ export AGENT_HUB_DATA_DIR=/opt/agent_hub/data
 
 完整执行流程、服务端去重机制与工程细节见 [`SKILL.md`](./SKILL.md)。
 
+> 想看真实命令与输出？`SKILL.md` 的「快速上手（完整示例）」一节有一轮开会的完整 transcript。运行 `python3 loop.py --version` 可查看版本号。
+
 ---
 
 ## 📋 依赖

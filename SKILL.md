@@ -17,11 +17,13 @@ Agent Meeting（底层接入 Agent Hub 群聊舞台 `http://localhost:8000`，�
 >
 > **入口硬约束（老板 2026-08-17 02:27 定）**：获取会议消息**必须经 `Skill` 工具正式调用本技能**（`Skill` command `agent-meeting`），再执行技能内的 `pull`/`reply` 命令。**禁止在对话里裸跑 `loop.py` 命令**——裸跑 = 没调技能 = 违反本铁律。区别：先 `Skill` 加载技能 → 再跑技能白纸黑写的命令 = 合规；连 `Skill` 都省了直接敲命令 = 偷懒裸跑。
 
-设变量（一次性，全程正斜杠绝对路径）：
+设变量（一次性，全程正斜杠绝对路径）。`loop.py` 仅用 Python 标准库，任意 `python3` 即可运行：
 ```
-PY=C:/Users/67972/.workbuddy/binaries/python/envs/default/Scripts/python.exe   # WorkBuddy 管理的 Python，路径因机而异，请按实际调整
+PY=python3                                         # macOS/Linux；Windows 用 python 或 WorkBuddy 管理的 python
 LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 # 本技能目录下的 loop.py
 ```
+
+> 注：若通过 WorkBuddy 的 `Skill` 工具加载本技能，**无需手动设这些变量**——工具会自动定位并执行 `loop.py`。下方命令仅作手动 / 调试参考。
 
 ---
 
@@ -54,7 +56,7 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 **参数**
 - `--name <名字>`（必填，否则 `exit(2)`）：Agent 名字。写入本地 `data/agent_name.txt`，并幂等注册到服务端、置开会态。
 
-**执行流程（`do_init` → `loop.py:123-128`，主入口 `loop.py:215-220`）**
+**执行流程（`do_init` → `loop.py:123-128`，主入口 `loop.py:216-221`）**
 1. 主入口先校验 `--name`：为空 → 打印 `init 需要 --name <名字>` + `exit(2)`。
 2. `save_name(name)`（`loop.py:97-101`）：`os.makedirs(DATA_DIR, exist_ok=True)` 后把名字写入 `agent_name.txt`（本地落盘，后续方法免传 `--name`）。
 3. `ensure_registered(name)`（`loop.py:115-120`）：`POST /api/agents/register`，best-effort（异常吞掉）。
@@ -83,7 +85,7 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 - `--max`（默认 1000）：最大轮询次数（约 50 分钟）。
 - **单次探测**：`--max 1 --interval 0.1` —— 只看一眼收件箱、立刻返回（有则返回消息，无则返回 `[]`），用于查状态/验证而不阻塞。
 
-**执行流程（`do_pull` → `loop.py:153-171`，主入口 `loop.py:242-245`）**
+**执行流程（`do_pull` → `loop.py:153-171`，主入口 `loop.py:243-246`）**
 ```
 name = resolve_name()                       # 读 --name 或本地 agent_name.txt
 for _ in range(max_iters):                  # 默认 1000 次
@@ -122,7 +124,7 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 - `--msg <内容>`：直接传入回复文本。运行环境已设 `PYTHONUTF8=1`，命令行中文不乱码。
 - `--file <路径>`：从文件读回复内容（utf-8），适合长文本。
 
-**执行流程（`do_reply` → `loop.py:174-190`，主入口 `loop.py:247-253`）**
+**执行流程（`do_reply` → `loop.py:174-190`，主入口 `loop.py:248-254`）**
 1. 主入口先校验 `--msg-id`：为空 → 打印 `reply 需要 --msg-id` + `exit(2)`。
 2. `name = resolve_name()`（读 `--name` 或本地名）。
 3. `do_reply(name, msg_id, content, content_file)`：
@@ -149,7 +151,7 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 
 **参数**：无（名字默认读本地 `agent_name.txt`）。
 
-**执行流程（`do_end` → `loop.py:142-150`，主入口 `loop.py:222-234`）**
+**执行流程（`do_end` → `loop.py:143-151`，主入口 `loop.py:223-235`）**
 1. `name = resolve_name()`（本地无则 `exit(3)`）。
 2. `ensure_registered(name)`（best-effort）。
 3. `POST /api/agents/{name}/session?active=false`（名字走 `quote` 编码）。
@@ -187,6 +189,47 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 
 ---
 
+## 快速上手（完整示例）
+
+下面是一轮「开会」的真实命令与输出（Agent 名 `WorkBuddy`，服务端 `localhost:8000`）：
+
+```bash
+# ① 上线初始化
+$ python3 loop.py init --name WorkBuddy
+[ok] 已初始化并上线: WorkBuddy @ http://localhost:8000
+
+# ② 收消息（老板在网页说了"上线开会，把昨天的方案整理一下"）
+$ python3 loop.py pull
+[{"id":"msg_a1b2","content":"上线开会，把昨天的方案整理一下","sender_type":"user","sender_agent_name":"老板","target_type":"single","target_agent_name":"WorkBuddy","created_at":"2026-08-17T02:10:00","client_msg_id":null,"read_by":[]}]
+
+# ③ 本人（WorkBuddy 对话里）真思考后，逐条回复
+$ python3 loop.py reply --msg-id msg_a1b2 --msg "收到，正在调出昨天的方案文档，马上整理给你。"
+{"status":"ok","message_id":"msg_c3d4","new_messages":[]}
+
+# ④ 收工前再拉一次（I-10：确认老板没新指令）
+$ python3 loop.py pull
+[]
+
+# ⑤ 收工
+$ python3 loop.py end
+{"status":"ok","name":"WorkBuddy","active":false}
+```
+
+> `reply` 的返回体带 `new_messages` 字段：若你回复期间老板又发了新消息，会顺手带回，省一次 `pull`；但规范上仍建议显式再 `pull` 一次，避免漏读（见 I-10）。
+
+---
+
+## 使用场景（老板视角）
+
+本连接器是 **AI（WorkBuddy）接入会议系统的"手"**，人类（老板）只需会网页操作：
+
+- **唤醒 AI**：在会议系统网页（`http://localhost:8000`）说「开会 / 上线开会」，AI 即进入循环（先 `init` 上线、再 `pull` 拉你的消息）。
+- **看状态**：网页上 Agent 显示 🟢 处理中 = 已上线在等你的消息；⚪ 已收工 = AI 已 `end` 离线。
+- **收工**：说「结束会议」，AI 收工前会再 `pull` 一次确认你没新指令，然后 `end` 离线。
+- **思考全在 AI 侧**：你看到的是 AI 在 WorkBuddy 对话里生成的回复，连接器脚本不自带任何大脑、不后台自循环。
+
+---
+
 ## 兼容别名对照
 
 | 别名 | 等价主命令 | 说明 |
@@ -195,6 +238,7 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 | `session`（不带 `--active`） | `end` | 收工 |
 | `watch [--interval --max]` | `pull [--interval --max]` | 轮询收消息 |
 | `register` | （main 自动调用） | 幂等注册，独立调用亦可 |
+| `--version` | — | 打印版本号 `agent-meeting 1.0.0` 并退出 |
 
 ---
 
@@ -208,10 +252,13 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 
 ---
 
-## 提交 GitHub 前待确认清单（共编用）
+## 🗺 路线图（Roadmap）
 
-- [x] `DATA_DIR` 已支持 `AGENT_HUB_DATA_DIR` 环境变量（跨平台 / 隔离测试友好）✅
-- [ ] `loop.py` 是否补充 `--version` / 帮助文案？
-- [ ] 是否需要把 `PY`/`LOOP` 变量提取为脚本自动探测（去掉硬编码路径）？
-- [ ] README 样例（老板视角：怎么开会、怎么看🟢/⚪）是否单独成文件？
-- [ ] 是否需要 `.gitignore` 排除 `data/` 运行时产物？
+- [x] `DATA_DIR` 支持 `AGENT_HUB_DATA_DIR` 环境变量（跨平台 / 隔离测试友好）
+- [x] 命令变量改为可移植写法（`python3` + 技能相对路径，去除硬编码机器路径）
+- [x] 新增「快速上手完整示例」「老板视角使用场景」两节
+- [ ] 多工具适配壳（OpenClaw / Trae 等）：核心已是标准 HTTP 接口，按需加薄壳即可
+- [ ] `loop.py` 补充更丰富的 `--help` 子命令说明
+- [ ] 可选：断线自动重连（当前仅 `pull` 容错，其余方法依赖服务在线）
+
+> 运行时产物 `data/`（含 `agent_name.txt` / `agent_read_*.json`）为本地缓存，已纳入 `.gitignore`，不会进仓库。
