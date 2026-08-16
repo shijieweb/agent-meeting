@@ -1,0 +1,11 @@
+# 运行时日志
+.auto.log
+.loop.log
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 本地运行时产物（如有）
+agent_name.txt
+seen.json*
