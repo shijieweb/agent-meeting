@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# ⚠️ DEPRECATED：本文件为早期实验性备用客户端，接口与 loop.py 不统一，
+# 且缺少本地名字缓存 / UTF-8 保证 / 连接容错。新用户请一律使用 loop.py，
+# 本文件仅保留作历史参考，不再维护。
 """Agent Hub 连接器（纯标准库，WorkBuddy 作大脑的「手」）。
 
 设计原则（skill 方式）：
@@ -44,7 +47,7 @@ def _req(method, path, body=None, timeout=15):
             pass
         print(f"[ERR] HTTP {e.code}: {detail}", file=sys.stderr)
         raise
-    except urllib.error.URGEError as e:  # noqa 兼容别名
+    except urllib.error.URLError as e:
         print(f"[ERR] 连接失败 {url}: {e}", file=sys.stderr)
         raise
 
