@@ -31,7 +31,7 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 |---|---|---|
 | **UTF-8 保证** | `loop.py:32-40` | `os.environ.setdefault("PYTHONUTF8","1")` + `sys.stdout/stderr.reconfigure(utf-8)` → 命令行中文、输出中文均不乱码 |
 | **SERVER** | `loop.py:42` | `os.environ.get("AGENT_HUB_URL", "http://localhost:8000")` → 可用环境变量覆盖 |
-| **DATA_DIR（硬编码）** | `loop.py:43` | `C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data`（Windows 绝对路径，**非跨平台**；隔离测试需 monkeypatch 此变量） |
+| **DATA_DIR（可配置）** | `loop.py:43` | 默认 `C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data`；可用环境变量 `AGENT_HUB_DATA_DIR` 覆盖（接入其它 Agent Hub 实例 / 跨机 / 隔离测试） |
 | **AGENT_NAME_FILE** | `loop.py:44` | `DATA_DIR/agent_name.txt` —— 本地缓存"我是谁" |
 | **`_req(method,path,body,query,timeout=15)`** | `loop.py:47-78` | 统一 HTTP 封装：`query` 走 `urlencode`（中文 agent 名也不乱码）；4xx/5xx 打印 `[ERR] HTTP x: detail` 并 re-raise；**连接失败抛 `ConnectionError`** |
 | **`resolve_name(cli_name)`** | `loop.py:81-94` | 优先级 `--name` > 读 `agent_name.txt` > 都没有则打印"请先 init"并 `exit(3)` |
@@ -201,7 +201,7 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 ## 工程细节与坑（实战踩过）
 
 1. **`pull` 容错、其他方法不容错**：`do_pull` 里 `ConnectionError` 被 `except` 捕获 → 继续轮询不退出；但 `init`/`reply`/`end` 里的实质 `_req` 没包 try，服务端没起时会直接抛 `ConnectionError` 崩溃。所以**只有 pull 能扛服务端短暂离线**，其余方法依赖服务在线。
-2. **DATA_DIR 硬编码**：`loop.py:43` 写死 Windows 路径，非跨平台。QA 隔离测试时 monkeypatch 成 `test_data` 才隔离；生产零污染靠停服直改 JSON + 服务无内存缓存（每次从文件读）。
+2. **DATA_DIR 已可配置**：`loop.py:43` 默认保留内置实例路径，支持 `AGENT_HUB_DATA_DIR` 环境变量覆盖（接入其它 Agent Hub 实例 / 跨机 / 隔离测试）。QA 隔离测试即设该变量指向 `test_data` 即可，无需改代码；生产零污染靠停服直改 JSON + 服务无内存缓存（每次从文件读）。
 3. **`new_messages` 彩蛋**：`reply` 返回体带服务端顺手返回的新消息，所以"回复完立即拉"有时可省一步——但规范上仍建议显式再 `pull` 一次，避免漏读。
 4. **中文名编码**：所有 URL 路径里的 agent 名走 `urllib.parse.quote(name, safe="")`，query 走 `urlencode`，所以"WorkBuddy/老板"这类中文/特殊名都不会乱码。
 5. **单进程监听**：uvicorn 无热重载。改 `storage.py`/`message_store.py` 后必须净重启进程，否则旧逻辑在跑（端口竞争会报 `[Errno 10048]`，需 PowerShell 按命令行精准杀光残留再起唯一进程）。
@@ -210,7 +210,7 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 
 ## 提交 GitHub 前待确认清单（共编用）
 
-- [ ] `DATA_DIR` 是否改为支持 `AGENT_HUB_DATA_DIR` 环境变量（跨平台 / 隔离测试友好）？
+- [x] `DATA_DIR` 已支持 `AGENT_HUB_DATA_DIR` 环境变量（跨平台 / 隔离测试友好）✅
 - [ ] `loop.py` 是否补充 `--version` / 帮助文案？
 - [ ] 是否需要把 `PY`/`LOOP` 变量提取为脚本自动探测（去掉硬编码路径）？
 - [ ] README 样例（老板视角：怎么开会、怎么看🟢/⚪）是否单独成文件？
