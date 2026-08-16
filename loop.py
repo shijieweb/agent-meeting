@@ -40,7 +40,12 @@ except Exception:  # pragma: no cover
     pass
 
 SERVER = os.environ.get("AGENT_HUB_URL", "http://localhost:8000")
-DATA_DIR = r"C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data"
+# 本地缓存目录（agent_name.txt / agent_read_*.json）。
+# 默认指向内置 Agent Hub 实例；接入其它实例请用环境变量 AGENT_HUB_DATA_DIR 覆盖。
+DATA_DIR = os.environ.get(
+    "AGENT_HUB_DATA_DIR",
+    r"C:\Users\67972\WorkBuddy\workbuddy\会议系统\agent_hub\data",
+)
 AGENT_NAME_FILE = os.path.join(DATA_DIR, "agent_name.txt")
 
 
