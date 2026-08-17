@@ -19,13 +19,17 @@ def register_agent(name):
 
     返回 (agents, created)：created=True 表示本次新注册，False 表示已存在。
     满足方案书 §7 T-REG-02 / T-PERM-01（重注册需提示唯一性）。
+
+    注意：必须先 prune 历史僵尸、再追加新 agent。否则新注册的 agent 因
+    last_seen==registered_at 会被 _is_zombie 误判为僵尸、被自己的清理逻辑当场删掉
+    （曾导致注册成功却查不到、发送报 target not found）。
     """
     agents = load_agents()
     if any(a.get("name") == name for a in agents):
         return agents, False
+    agents = [a for a in agents if not _is_zombie(a)]  # 先清历史僵尸（不含本次新注册）
     agents.append({"name": name, "registered_at": now_iso(), "last_seen": now_iso(), "status": "waiting", "session": False})
     save_agents(agents)
-    prune_zombie_agents()  # 注册时顺手清掉历史僵尸占位，防测试残留无限累积
     return agents, True
 
 
@@ -35,18 +39,27 @@ def agent_exists(name):
 
 
 INACTIVE_DAYS = 7
+# 新注册宽限期：刚注册（last_seen==registered_at）但还没来得及首 pull 的 agent 不能算僵尸，
+# 否则注册即被清掉。超过该时长仍未任何活动才判定为被遗弃的占位僵尸。
+ZOMBIE_GRACE_SECONDS = 3600
 
 
 def _is_zombie(a):
-    """僵尸占位 = 从未真正活动（last_seen==registered_at，注册后无任何 pull/心跳）或长期离线（无 session 且超阈值）。"""
+    """僵尸占位 = 注册后超宽限期仍无任何活动（last_seen==registered_at 且已超 grace）或长期离线（无 session 且超阈值）。"""
     if a.get("session"):
         return False
     reg = a.get("registered_at")
     seen = a.get("last_seen")
-    if seen == reg:          # 注册后从未被 record_pull 刷新过 last_seen → 纯占位
-        return True
+    now = time.time()
+    if seen == reg:          # 注册后从未被 record_pull 刷新过 last_seen
+        try:
+            reg_ts = time.mktime(time.strptime(reg, "%Y-%m-%dT%H:%M:%S"))
+            if now - reg_ts > ZOMBIE_GRACE_SECONDS:  # 超宽限期仍无活动 → 真被遗弃的占位
+                return True
+        except (ValueError, TypeError):
+            pass
+        return False         # 宽限期内：刚注册、即将首 pull，不算僵尸
     try:
-        now = time.time()
         seen_ts = time.mktime(time.strptime(seen, "%Y-%m-%dT%H:%M:%S"))
         if now - seen_ts > INACTIVE_DAYS * 86400:
             return True
@@ -56,7 +69,11 @@ def _is_zombie(a):
 
 
 def prune_zombie_agents(inactive_days=INACTIVE_DAYS):
-    """删除僵尸占位 agent（测试残留等），返回删除数量。注册新 agent 时自动调用，防止无限累积污染已读统计。"""
+    """删除僵尸占位 agent（测试残留等），返回删除数量。
+
+    注意：不再于 register_agent 内自动调用——新注册 agent 的 last_seen==registered_at，
+    若自动 prune 会把自己删掉（已改为 register 时先清旧僵尸再追加新 agent）。
+    现仅由 POST /api/agents/prune 手动触发，或在需要时显式调用。"""
     agents = load_agents()
     before = len(agents)
     kept = [a for a in agents if not _is_zombie(a)]

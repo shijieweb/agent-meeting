@@ -35,8 +35,8 @@ s, d = req("POST", "/api/agents/register", {"name": "AgentX"})
 check("register AgentX", s == 200 and d.get("status") == "ok", str(d))
 s, d = req("POST", "/api/agents/register", {"name": "AgentY"})
 check("register AgentY", s == 200)
-s, d = req("GET", "/api/agents")
-check("agents 列表含 X/Y", set(["AgentX", "AgentY"]).issubset(set(d["agents"])), str(d["agents"]))
+s, d = req("GET", "/api/agents?all=true")
+check("agents 全量列表含 X/Y（默认活跃过滤下用 all 查全量）", set(["AgentX", "AgentY"]).issubset(set(d["agents"])), str(d["agents"]))
 
 print("== 2. 发送单点消息 + 拉取 + 已读 ==")
 s, d = req("POST", "/api/messages/send",
