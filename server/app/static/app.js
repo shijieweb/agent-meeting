@@ -66,6 +66,12 @@ async function init() {
   if (list) {
     list.addEventListener('scroll', onListScroll);
   }
+  setupKeyboardHandling();  // EXT-2：移动端输入法遮挡处理
+  const mi = document.getElementById('message-input');
+  if (mi) {
+    mi.addEventListener('input', autoGrowInput);  // EXT-3：输入时自动增高
+    autoGrowInput();
+  }
 }
 
 async function loadAgentStatus() {
@@ -74,10 +80,12 @@ async function loadAgentStatus() {
     const data = await res.json();
     const container = document.getElementById('agent-status');
     const hint = document.getElementById('reawaken-hint');
+    const lostNameEl = document.getElementById('lost-agent-name');
     if (!container) return;
     // F1：去掉写死单一名字的 find 过滤；复用 #agent-status 为状态点容器，遍历全部 agent 动态渲染。
     container.innerHTML = '';
     let anyLost = false;
+    let lostAgentName = '';   // D-2：记录掉线 agent 的真实名，回填到提示语
     (data.agents || []).forEach(a => {
       const name = a.name || '';
       const dot = document.createElement('span');
@@ -97,6 +105,7 @@ async function loadAgentStatus() {
               dot.classList.add('lost');
               dot.textContent = name + '·已掉线·需重唤';
               anyLost = true;
+              lostAgentName = name;
             } else {
               dot.classList.add('idle');
               dot.textContent = name + '·离线';
@@ -104,6 +113,10 @@ async function loadAgentStatus() {
           } else if (a.status === 'working') {
             dot.classList.add('working');
             dot.textContent = name + '·处理中';
+          } else if (a.has_unread) {
+            // EXT-1：有未读但非 working —— 显示「处理任务」，区别于真待命
+            dot.classList.add('waiting');
+            dot.textContent = name + '·处理任务';
           } else {
             dot.classList.add('waiting');
             dot.textContent = name + '·待命中';
@@ -113,6 +126,8 @@ async function loadAgentStatus() {
       container.appendChild(dot);
     });
     if (hint) hint.style.display = anyLost ? 'block' : 'none';
+    // D-2：把真实掉线 agent 名回填提示语；无具体名时兜底 "AI"
+    if (lostNameEl) lostNameEl.textContent = lostAgentName || 'AI';
   } catch (e) { /* 状态接口异常不阻断聊天 */ }
 }
 
@@ -323,6 +338,50 @@ function isNearBottom() {
   return list.scrollTop + list.clientHeight >= list.scrollHeight - BOTTOM_THRESHOLD;
 }
 
+// ---- EXT-3：输入框自适应高度（textarea）----
+// 输入时按 scrollHeight 增高，封顶 MAX_INPUT_H 后内部滚动；发送后由 sendMessage 调回重置。
+const MAX_INPUT_H = 120;
+function autoGrowInput() {
+  const el = document.getElementById('message-input');
+  if (!el) return;
+  el.style.height = 'auto';
+  const h = Math.min(el.scrollHeight, MAX_INPUT_H);
+  el.style.height = h + 'px';
+  el.style.overflowY = el.scrollHeight > MAX_INPUT_H ? 'auto' : 'hidden';
+}
+
+// ---- EXT-2：移动端输入法遮挡处理 ----
+// 聚焦时把输入框滚入可视区域中部；监听 visualViewport 伸缩，用 env(keyboard-inset-height)
+// 或 visualViewport 差值计算键盘高度，给输入区加底部 padding 把输入框顶进视口。
+function setupKeyboardHandling() {
+  const inputArea = document.querySelector('.input-area');
+  const input = document.getElementById('message-input');
+  if (!inputArea || !input) return;
+
+  // 聚焦延时滚动，等输入法弹起后再定位
+  input.addEventListener('focus', () => {
+    setTimeout(() => {
+      input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 300);
+  });
+
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const onVvChange = () => {
+      const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      // 优先 env(keyboard-inset-height) 兜底，否则用 visualViewport 差值
+      const envInset = getComputedStyle(document.documentElement)
+        .getPropertyValue('keyboard-inset-height');
+      const inset = envInset ? parseFloat(envInset) : keyboardHeight;
+      inputArea.style.paddingBottom = (inset > 0 ? inset : 0) + 'px';
+      if (inset > 0) input.scrollIntoView({ block: 'center' });
+    };
+    vv.addEventListener('resize', onVvChange);
+    vv.addEventListener('scroll', onVvChange);
+    window.addEventListener('blur', () => { inputArea.style.paddingBottom = '0px'; });
+  }
+}
+
 // ---- 微信式浮动提示组件（AC-3.1 / 3.2 / 3.3 / 3.4）----
 function ensureBanner() {
   let banner = document.getElementById('new-msg-banner');
@@ -375,10 +434,12 @@ async function sendMessage() {
   // BUG-D 修复：发送失败（如 single 目标 agent 不存在）不追加、不污染游标，避免退化为全量回放
   if (!res.ok) {
     input.value = '';
+    autoGrowInput();   // EXT-3：发送失败也复位高度
     return;
   }
   const data = await res.json();
   input.value = '';
+  autoGrowInput();   // EXT-3：发送后复位输入框高度到 1 行
   if (!data || !data.message_id) {
     return;
   }

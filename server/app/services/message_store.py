@@ -339,7 +339,10 @@ def cleanup_messages(keep_last=None, older_than=None):
     remaining = holder.get("remaining", 0)
 
     def _mut_reads(reads):
-        return [r for r in reads if r.get("message_id") in keep_ids]
+        # D-1 修复：update_json_atomic 写回的是被原地修改的 data（而非 mutator 返回值），
+        # 因此必须原地改 reads（reads[:] = ...），不能只返回新列表，否则孤儿回执永不清理。
+        reads[:] = [r for r in reads if r.get("message_id") in keep_ids]
+        return None
 
     update_json_atomic(READS_FILE, [], _mut_reads)
     return {"archived": archived, "remaining": remaining}

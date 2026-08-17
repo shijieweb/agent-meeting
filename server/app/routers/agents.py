@@ -9,8 +9,15 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 @router.get("/status")
 def agents_status():
-    """返回各 Agent 的 {name, last_seen, status, session}，前端据此显示在线/工作状态。"""
-    return {"agents": agent_store.get_agent_statuses()}
+    """返回各 Agent 的 {name, last_seen, status, session, has_unread}。
+
+    EXT-1：附加上 has_unread（复用 message_store.agent_has_unread），
+    让前端能区分「待命中但有未读任务」与「真待命」，避免有未读却显示「待命」。
+    """
+    statuses = agent_store.get_agent_statuses()
+    for a in statuses:
+        a["has_unread"] = message_store.agent_has_unread(a.get("name", ""))
+    return {"agents": statuses}
 
 
 @router.post("/{name}/session")

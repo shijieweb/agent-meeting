@@ -12,13 +12,13 @@
       <h1>小伙伴会议系统</h1>
       <span id="agent-status" class="status-dot"></span>
     </header>
-    <div id="reawaken-hint" class="reawaken-hint" style="display:none">⚠️ 阿编已掉线（会话中大脑失联）—— 在对话里说「开会」重新唤醒</div>
+    <div id="reawaken-hint" class="reawaken-hint" style="display:none">⚠️ <span id="lost-agent-name"></span>已掉线（会话中大脑失联）—— 在对话里说「开会」重新唤醒</div>
     <main id="message-list" class="message-list"></main>
     <footer class="input-area">
       <select id="agent-select" class="agent-select">
         <option value="all">@所有人</option>
       </select>
-      <input type="text" id="message-input" class="message-input" placeholder="输入消息..." autocomplete="off">
+      <textarea id="message-input" class="message-input" placeholder="输入消息..." autocomplete="off" rows="1"></textarea>
       <button id="send-btn" class="send-btn">发送</button>
     </footer>
   </div>
