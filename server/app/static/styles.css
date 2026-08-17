@@ -44,24 +44,6 @@ html, body {
   color: #1f2329;
 }
 
-/* ---- 顶层状态栏：右上角 agent 在线/状态点（R1 恢复）---- */
-.agent-status {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-left: auto;            /* 顶到 header 右侧（header 已是 flex）*/
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-.status-dot {
-  font-size: 12px;
-  padding: 2px 9px;
-  border-radius: 11px;
-  white-space: nowrap;
-}
-.status-dot.working { background: #E8F4FD; color: #2AABEE; }
-.status-dot.waiting { background: #FFF4E1; color: #E08A00; }
-.status-dot.idle { background: #f0f0f0; color: #999; }
 #message-list {
   flex: 1;
   min-height: 0;
@@ -147,6 +129,20 @@ html, body {
   border-top: 1px solid #e6e6e6;
   background: #fff;
   padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  transition: transform 0.2s ease;   /* C（keyboard-v15）：位置切换平滑过渡 */
+}
+/* C（keyboard-v15）：仅移动端聚焦时输入栏浮动到视口顶部，键盘从底部弹起完全碰不到；
+   由 app.js 依据 IS_MOBILE 判定后增删该类；PC 不触发，基线钉底样式（flex-shrink:0 等）保持。 */
+.input-area.ime-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  z-index: 100;
+  border-top: none;
+  border-bottom: 1px solid #e6e6e6;
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
 }
 #message-input {
   flex: 1;

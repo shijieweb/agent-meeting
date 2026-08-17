@@ -1,6 +1,18 @@
 let currentAgentList = [];
 let prevAgentStates = null;     // F1：上一次 agent 在线态快照（name -> true/false），用于 join/leave 提示
 
+// ---- 相对路径 base（B 修复）：兼容反代剥离前缀 ----
+// '/meeting' → '/meeting/'；'/meeting/' → '/meeting/'；'/' → '/'
+// 全部 API 都基于该 base 拼接，域名反代形态（agnes.owen1.de5.net/meeting）下不再 404。
+var API_BASE = (function () {
+  var p = location.pathname;
+  return p.charAt(p.length - 1) === '/' ? p : p + '/';
+})();
+
+// ---- C（keyboard-v15）：移动端判定（触屏/多点触控/UA 三取最稳组合）----
+// 只有手机/触屏设备触发「聚焦浮动到顶部」；PC 上聚焦不得浮动。
+var IS_MOBILE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+
 // ---- 增量加载 / 浮动提示 模块级状态（T-meeting-incremental）----
 let clientNewestId = null;     // 当前已渲染的最新消息 id（展示用）
 let clientOldestId = null;     // 当前已渲染的最旧消息 id（before 游标基准）
@@ -75,11 +87,11 @@ async function init() {
 }
 
 async function loadAgentStatus() {
+  const container = document.getElementById('agent-status');
+  if (!container) return;   // 顶部状态栏已移除（老板要求），容器不存在时直接跳过，不发无效请求
   try {
-    const res = await fetch('/api/agents/status');
+    const res = await fetch(API_BASE + 'api/agents/status');
     const data = await res.json();
-    const container = document.getElementById('agent-status');
-    if (!container) return;
     // F1：去掉写死单一名字的 find 过滤；复用 #agent-status 为状态点容器，遍历全部 agent 动态渲染。
     container.innerHTML = '';
     (data.agents || []).forEach(a => {
@@ -125,7 +137,7 @@ async function loadAgentStatus() {
 
 async function loadAgents() {
   try {
-    const res = await fetch('/api/agents');
+    const res = await fetch(API_BASE + 'api/agents');
     const data = await res.json();
     currentAgentList = data.agents;
     const select = document.getElementById('agent-select');
@@ -146,7 +158,7 @@ async function loadAgents() {
     // F1：前端 diff agent 在线/离线状态，在 30s 轮询中发出「X 加入了群组 / 离开了群组」提示。
     // 注：/api/agents 仅返回名字数组，状态(session/status)需另取自 /api/agents/status。
     try {
-      const sres = await fetch('/api/agents/status');
+      const sres = await fetch(API_BASE + 'api/agents/status');
       const sdata = await sres.json();
       const agentsArr = sdata.agents || [];
       const currentOnline = {};
@@ -178,7 +190,7 @@ async function loadAgents() {
 // 首屏：只取最新一页（?limit=30），顺序 appendMessage，初始化游标与去重集（AC-1.1）
 async function loadInitialPage() {
   try {
-    const res = await fetch('/api/messages/history?limit=30');
+    const res = await fetch(API_BASE + 'api/messages/history?limit=30');
     const data = await res.json();
     const list = document.getElementById('message-list');
     list.innerHTML = '';        // 仅首屏一次性清空（非轮询/追加），其后不再整体重绘
@@ -198,7 +210,7 @@ async function loadInitialPage() {
 // 2s 增量轮询：带 since_id 拉取轮询游标之后的新消息；空会议室降级为首屏语义（风险-E 修复）
 async function pollNew() {
   try {
-    let url = '/api/messages/history';
+    let url = API_BASE + 'api/messages/history';
     if (pollCursorId !== null && pollCursorId !== undefined) {
       url += '?since_id=' + encodeURIComponent(pollCursorId);
     } else {
@@ -334,7 +346,7 @@ async function loadOlder() {
     const list = document.getElementById('message-list');
     const prevScrollTop = list.scrollTop;
     const prevScrollHeight = list.scrollHeight;
-    const res = await fetch('/api/messages/history?before_id=' + encodeURIComponent(clientOldestId) + '&limit=30');
+    const res = await fetch(API_BASE + 'api/messages/history?before_id=' + encodeURIComponent(clientOldestId) + '&limit=30');
     const data = await res.json();
     const msgs = data.messages || [];
     if (msgs.length === 0) {
@@ -357,7 +369,7 @@ async function refreshReadReceipts() {
   // F10：无已渲染 user 消息（空聊天）时跳过轮询请求，避免无谓的 history 拉取
   if (readStatusNodes.size === 0) return;
   try {
-    const res = await fetch('/api/messages/history?limit=200');  // F5：有界拉取（仅用于刷新已渲染消息的 ✓/○ 徽标）
+    const res = await fetch(API_BASE + 'api/messages/history?limit=200');  // F5：有界拉取（仅用于刷新已渲染消息的 ✓/○ 徽标）
     const data = await res.json();
     (data.messages || []).forEach(msg => {
       if (!insertedIds.has(msg.id)) return;        // 只处理已渲染的消息
@@ -419,14 +431,18 @@ function autoGrowInput() {
 function setupKeyboardHandling() {
   const input = document.getElementById('message-input');
   const list = document.getElementById('message-list');
+  const inputArea = document.querySelector('.input-area');
   if (!input || !list) return;
   input.addEventListener('focus', function () {
+    // C（keyboard-v15）：仅移动端把输入栏浮动到视口顶部（键盘从底部弹起完全碰不到）；PC 不浮动
+    if (IS_MOBILE && inputArea) inputArea.classList.add('ime-top');
     setTimeout(function () {
       list.scrollTop = list.scrollHeight;                       // 最新消息滚入视口
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); // 与参考 HTML 对齐（整页滚动布局下生效，本布局为 no-op 但不影响）
     }, 350);
   });
   input.addEventListener('blur', function () {
+    if (IS_MOBILE && inputArea) inputArea.classList.remove('ime-top');  // 失焦回到底部
     setTimeout(function () {
       if (window.innerHeight < window.outerHeight - 50) {       // 键盘曾弹起
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -480,7 +496,7 @@ async function sendMessage() {
     target_agent_name: target === 'all' ? null : target,
     client_msg_id: genClientMsgId()   // F3：携带非空 client_msg_id 启用后端幂等
   };
-  const res = await fetch('/api/messages/send', {
+  const res = await fetch(API_BASE + 'api/messages/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -513,13 +529,29 @@ async function sendMessage() {
   appendMessage(optimisticMsg);
 }
 
-document.getElementById('send-btn').addEventListener('click', sendMessage);
-document.getElementById('message-input').addEventListener('keydown', (e) => {
-  // textarea：回车发送，Shift+回车换行
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
+// ---- 入口：等待 DOM 就绪 ----
+// 脚本经 index.html <head> 内 document.write 动态写入，会在 body 解析前执行，
+// 必须等 DOMContentLoaded 后再绑定控件与启动 init()（body 末尾加载时 readyState 已非 loading，立即执行）。
+function runWhenReady(fn) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fn);
+  } else {
+    fn();
   }
-});
+}
 
-init();
+runWhenReady(function () {
+  const sendBtn = document.getElementById('send-btn');
+  if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+  const input = document.getElementById('message-input');
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      // textarea：回车发送，Shift+回车换行
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  }
+  init();
+});
