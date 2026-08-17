@@ -187,12 +187,62 @@ def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=No
     return {"status": "ok", "new_messages": new_messages}
 
 
-def get_history():
-    """返回全部消息（用户消息附带 read_by 列表）。对应方案书 §5.1 获取聊天历史。"""
+def get_history(since_id=None, before_id=None, limit=30):
+    """返回游标分页后的消息（用户消息附带 read_by 列表）。对应方案书 §5.1 + T-meeting-incremental。
+
+    排序全序键 = (created_at, index)，index 为消息在 messages.json 数组中的下标
+    （append 顺序 = 写入顺序），用于同秒消息的稳定 tie-break，保证切片连续无漏。
+
+    参数：
+      since_id: 游标消息 id；返回严格晚于该消息（按全序键）的全部消息，用于增量轮询拉新。
+      before_id: 游标消息 id；返回严格早于该消息中紧邻其前的 limit 条（升序），用于向上翻加载更早。
+      limit: 每页条数上限（首屏/翻页用）；<=0 视为 30。
+
+    返回：按 (created_at, index) 升序的 dict 列表，字段与旧 get_history 完全一致
+          （user 消息附 read_by，agent 消息 read_by=[]）。无参调用向后兼容返回最新 limit 条。
+    """
+    if limit is None or limit <= 0:
+        limit = 30
+
     msgs = load_messages()
     reads = load_reads()
+
+    # 候选集：保留原数组下标，构造 (index, message) 列表
+    indexed = list(enumerate(msgs))
+
+    # 全序键：(created_at 字符串字典序, 原数组下标)。created_at 同格式可直接比较。
+    def sort_key(item):
+        i, m = item
+        return (m["created_at"], i)
+
+    # 按全序键升序排序，保证输出升序、切片连续无漏
+    indexed.sort(key=sort_key)
+
+    # 按 id 定位游标的全序键值；找不到时退化为「无该游标」语义
+    def locate(target_id):
+        for i, m in indexed:
+            if m.get("id") == target_id:
+                return (m["created_at"], i)
+        return None
+
+    if since_id is not None:
+        cur = locate(since_id)
+        if cur is None:
+            selected = indexed  # 游标无效 -> 退化为全部（升序）
+        else:
+            selected = [item for item in indexed if sort_key(item) > cur]  # 严格晚于，升序
+    elif before_id is not None:
+        cur = locate(before_id)
+        if cur is None:
+            selected = indexed  # 游标无效 -> 退化为全部（升序）
+        else:
+            earlier = [item for item in indexed if sort_key(item) < cur]  # 严格早于
+            selected = earlier[-limit:]  # 紧邻其前的 limit 条，升序
+    else:
+        selected = indexed[-limit:]  # 最新 limit 条，升序（首屏）
+
     out = []
-    for m in msgs:
+    for i, m in selected:
         d = dict(m)
         if m["sender_type"] == "user":
             d["read_by"] = [

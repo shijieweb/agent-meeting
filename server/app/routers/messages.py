@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """消息拉取、提交回复、已读状态。对应方案书 §5.1 #3/#4/#5/#6。"""
+from typing import Optional
+
 from fastapi import APIRouter, Query, HTTPException
 from app.models.schemas import MessageSend, MessageReply
 from app.services import message_store, agent_store
@@ -39,5 +41,10 @@ def send(body: MessageSend):
 
 
 @router.get("/history")
-def history():
-    return {"messages": message_store.get_history()}
+def history(
+    since_id: Optional[str] = Query(None, description="游标消息 id，返回严格晚于它的消息（增量轮询）"),
+    before_id: Optional[str] = Query(None, description="游标消息 id，返回严格早于它的前 limit 条（向上翻）"),
+    limit: int = Query(30, description="每页条数上限（首屏/翻页）"),
+):
+    messages = message_store.get_history(since_id=since_id, before_id=before_id, limit=limit)
+    return {"messages": messages}
