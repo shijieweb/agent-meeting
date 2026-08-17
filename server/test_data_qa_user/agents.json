@@ -1,0 +1,30 @@
+[
+  {
+    "name": "WorkBuddy",
+    "registered_at": "2026-08-17T18:23:43",
+    "last_seen": "2026-08-17T18:22:33",
+    "status": "waiting",
+    "session": false
+  },
+  {
+    "name": "Claude",
+    "registered_at": "2026-08-17T18:23:43",
+    "last_seen": "2026-08-17T18:27:05",
+    "status": "waiting",
+    "session": true
+  },
+  {
+    "name": "NewAgent",
+    "registered_at": "2026-08-17T18:24:24",
+    "last_seen": "2026-08-17T18:25:48",
+    "status": "waiting",
+    "session": false
+  },
+  {
+    "name": "qa_ext1",
+    "registered_at": "2026-08-17T19:31:14",
+    "last_seen": "2026-08-17T19:31:14",
+    "status": "waiting",
+    "session": false
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "message_id": "msg_7e6c5fa465",
+    "agent_name": "Claude",
+    "read_at": "2026-08-17T18:24:13"
+  },
+  {
+    "message_id": "msg_2447c4b393",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_2a48962167",
+    "agent_name": "qa_ext1",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_fd19449b9d",
+    "agent_name": "qa_ext1",
+    "read_at": null
+  }
+]

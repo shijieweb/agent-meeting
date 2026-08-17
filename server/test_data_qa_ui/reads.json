@@ -1,0 +1,32 @@
+[
+  {
+    "message_id": "msg_61541adc0d",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_61541adc0d",
+    "agent_name": "Claude",
+    "read_at": "2026-08-17T18:25:23"
+  },
+  {
+    "message_id": "msg_6609bbd16a",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_6609bbd16a",
+    "agent_name": "Claude",
+    "read_at": "2026-08-17T18:25:23"
+  },
+  {
+    "message_id": "msg_6609bbd16a",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_abdb443da6",
+    "agent_name": "Claude",
+    "read_at": "2026-08-17T18:25:23"
+  }
+]

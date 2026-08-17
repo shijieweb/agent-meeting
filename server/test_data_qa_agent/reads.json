@@ -1,0 +1,362 @@
+[
+  {
+    "message_id": "msg_39c78b97e8",
+    "agent_name": "WorkBuddy",
+    "read_at": "2026-08-17T18:21:17"
+  },
+  {
+    "message_id": "msg_39c78b97e8",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_d48395b083",
+    "agent_name": "WorkBuddy",
+    "read_at": "2026-08-17T18:21:17"
+  },
+  {
+    "message_id": "msg_d48395b083",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1c1a764c93",
+    "agent_name": "WorkBuddy",
+    "read_at": "2026-08-17T18:21:17"
+  },
+  {
+    "message_id": "msg_3cd25d6b0f",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_3cd25d6b0f",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b5b5474ba5",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b5b5474ba5",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_01ecc8a1cb",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_01ecc8a1cb",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_9dfcabf851",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_9dfcabf851",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_5acd79a38e",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_5acd79a38e",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_66885b1045",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_66885b1045",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_2cdf4070cf",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_2cdf4070cf",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_e98f76fd00",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_e98f76fd00",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1c6ce4e0aa",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1c6ce4e0aa",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f2156b7dd8",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f2156b7dd8",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_5ae139544a",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_5ae139544a",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_5cb8757d6c",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_5cb8757d6c",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_708edf5bb8",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_708edf5bb8",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1b743436f5",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1b743436f5",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_81b1c9b7c4",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_81b1c9b7c4",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1ec9674efb",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1ec9674efb",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1460a0aeb9",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_1460a0aeb9",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_fc1b8f1925",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_fc1b8f1925",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_38c5c85916",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_38c5c85916",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f36aa0fe6a",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f36aa0fe6a",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_2079f87872",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_2079f87872",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b5fc894409",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b5fc894409",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_0a944c21f0",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_0a944c21f0",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_d520eeb7cc",
+    "agent_name": "WorkBuddy",
+    "read_at": "2026-08-17T18:22:39"
+  },
+  {
+    "message_id": "msg_d520eeb7cc",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b3f477d787",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b3f477d787",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b3f477d787",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_740e0246cc",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_740e0246cc",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_740e0246cc",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_57cf80b3fd",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_57cf80b3fd",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_57cf80b3fd",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_ce370e562d",
+    "agent_name": "WorkBuddy",
+    "read_at": "2026-08-17T18:24:48"
+  },
+  {
+    "message_id": "msg_ce370e562d",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_ce370e562d",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f6c0eec05a",
+    "agent_name": "WorkBuddy",
+    "read_at": "2026-08-17T18:25:37"
+  },
+  {
+    "message_id": "msg_f6c0eec05a",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f6c0eec05a",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_6227c95c58",
+    "agent_name": "WorkBuddy",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_6227c95c58",
+    "agent_name": "Claude",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_6227c95c58",
+    "agent_name": "NewAgent",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_6227c95c58",
+    "agent_name": "QAProbe",
+    "read_at": "2026-08-17T18:36:41"
+  }
+]
