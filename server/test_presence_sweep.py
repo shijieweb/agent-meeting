@@ -4,6 +4,8 @@
 隔离模式：monkeypatch `app.config.DATA_DIR` 到 tmp 临时目录（storage._path 每次调用
 `from app.config import DATA_DIR` 取当前值，天然生效），绝不触碰生产 server/data。
 """
+import json
+import os
 import time
 
 import pytest
@@ -248,3 +250,89 @@ def test_prune_uses_should_delete():
     assert removed == 1
     assert all(a.get("name") != "Ghost" for a in agent_store.load_agents())
     assert not storage.agent_read_set_exists("Ghost")
+
+
+# ---------------------------------------------------------------------------
+# 并入项：清扫日志 sweep_log.jsonl / 状态事件钩子 status_events.jsonl / token 预留
+# ---------------------------------------------------------------------------
+
+def _read_jsonl(data_dir, name):
+    p = os.path.join(data_dir, name)
+    if not os.path.isfile(p):
+        return []
+    lines = []
+    with open(p, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                lines.append(json.loads(line))
+    return lines
+
+
+def test_append_jsonl_append_only(iso_dir):
+    storage.append_jsonl("probe.jsonl", {"n": 1})
+    storage.append_jsonl("probe.jsonl", {"n": 2})
+    recs = _read_jsonl(iso_dir, "probe.jsonl")
+    assert [r["n"] for r in recs] == [1, 2]          # 追加不覆盖
+
+
+def test_sweep_logs_lost_and_deleted(iso_dir):
+    # 一个失联（仅置 offline，保留期不删）→ lost_to_offline；一个超保留期 → deleted
+    agent_store.save_agents([
+        make_agent("LostOnly", last_seen_ago=1300, status="waiting", session=True, registered_ago=99999),
+        make_agent("DeletedGhost", last_seen_ago=23000, status="offline", session=False),
+    ])
+    storage.save_agent_read_set("DeletedGhost", ["x"])
+    agent_store.scan_and_sweep()
+    sweep = _read_jsonl(iso_dir, agent_store.SWEEP_LOG)
+    events = _read_jsonl(iso_dir, agent_store.STATUS_EVENTS_LOG)
+    sweep_by = {(r["name"], r["action"]) for r in sweep}
+    assert ("LostOnly", "lost_to_offline") in sweep_by
+    assert ("DeletedGhost", "deleted") in sweep_by
+    ev_by = {(r["name"], r["event"]) for r in events}
+    assert ("LostOnly", "lost") in ev_by
+    assert ("DeletedGhost", "deleted") in ev_by
+    # 字段完整性
+    assert all({"ts", "name", "action", "reason"} <= set(r) for r in sweep)
+    assert all({"ts", "name", "event"} <= set(r) for r in events)
+
+
+def test_sweep_logs_idempotent_no_dup(iso_dir):
+    agent_store.save_agents([make_agent("Once", last_seen_ago=1300, status="waiting", session=True, registered_ago=99999)])
+    agent_store.scan_and_sweep()
+    agent_store._last_sweep_ts = 0.0
+    agent_store.scan_and_sweep()
+    events = _read_jsonl(iso_dir, agent_store.STATUS_EVENTS_LOG)
+    lost_events = [r for r in events if r["event"] == "lost"]
+    assert len(lost_events) == 1                       # 只记一次，幂等
+
+
+def test_register_events_and_token_hash(iso_dir):
+    agents, created, info = agent_store.register_agent("TkNew")
+    assert created is True
+    assert agents[0]["token_hash"] is None             # token 预留字段
+    # 在线同名幂等：不产生新 registered 事件、不重置
+    agent_store.register_agent("TkNew")
+    events = _read_jsonl(iso_dir, agent_store.STATUS_EVENTS_LOG)
+    assert sum(1 for r in events if r["name"] == "TkNew" and r["event"] == "registered") == 1
+    # 唤醒路径也带 token_hash（在 TkNew 之外追加失联记录，不覆盖原文件）
+    cur = agent_store.load_agents()
+    cur.append(make_agent("TkWake", last_seen_ago=1300, status="waiting", session=True, registered_ago=99999))
+    agent_store.save_agents(cur)
+    agents2, created2, info2 = agent_store.register_agent("TkWake")
+    assert created2 is False and info2["reactivated"] is True
+    assert agents2[0]["token_hash"] is None
+    events = _read_jsonl(iso_dir, agent_store.STATUS_EVENTS_LOG)
+    ev = {(r["name"], r["event"]) for r in events}
+    assert ("TkNew", "registered") in ev
+    assert ("TkWake", "reactivated") in ev
+
+
+def test_set_session_events(iso_dir):
+    agent_store.register_agent("SessAgent")
+    agent_store.set_session("SessAgent", True)
+    agent_store.set_session("SessAgent", False)
+    events = _read_jsonl(iso_dir, agent_store.STATUS_EVENTS_LOG)
+    ev = {(r["name"], r["event"]) for r in events}
+    assert ("SessAgent", "session_on") in ev
+    assert ("SessAgent", "session_off") in ev

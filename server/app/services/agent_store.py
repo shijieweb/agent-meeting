@@ -18,9 +18,14 @@ from .storage import (
     now_iso,
     update_json_atomic,
     delete_agent_read_set,
+    append_jsonl,
 )
 
 AGENTS_FILE = "agents.json"
+
+# JSONL 日志文件名（DATA_DIR 下，gitignored，只追加不覆盖）
+SWEEP_LOG = "sweep_log.jsonl"
+STATUS_EVENTS_LOG = "status_events.jsonl"
 
 # 时间口径：统一本地时间 "%Y-%m-%dT%H:%M:%S"（与 now_iso / 既有解析一致）。
 _ISO_FMT = "%Y-%m-%dT%H:%M:%S"
@@ -50,18 +55,23 @@ def register_agent(name):
             if state == "online":
                 return agents, False, {"reactivated": False}   # 在线：幂等，不动
             # 失联/离线（无论是否超保留期）→ 唤醒重置（老板拍板 §5.1-4）
-            a["registered_at"] = now_iso()
-            a["last_seen"] = now_iso()
+            ts = now_iso()
+            a["registered_at"] = ts
+            a["last_seen"] = ts
             a["status"] = "waiting"
             a["session"] = False
+            a["token_hash"] = None            # token 预留（可空，不实现校验）
             save_agents(agents)
+            append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "reactivated"})
             return agents, False, {"reactivated": True}
     # 先清僵尸、再追加新 agent（防注册即删：新注册 last_seen==registered_at，
     # 若保留历史僵尸不清理，_should_delete 的占位判定可能误伤——沿用原注释语义）
     agents = [a for a in agents if not _should_delete(a)]
-    agents.append({"name": name, "registered_at": now_iso(), "last_seen": now_iso(),
-                   "status": "waiting", "session": False})
+    ts = now_iso()
+    agents.append({"name": name, "registered_at": ts, "last_seen": ts,
+                   "status": "waiting", "session": False, "token_hash": None})
     save_agents(agents)
+    append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "registered"})
     return agents, True, {"reactivated": False}
 
 
@@ -179,6 +189,7 @@ def scan_and_sweep() -> int:
         _last_sweep_ts = now
 
     removed_names = []
+    lost_names = []
 
     def _mut(agents):
         keep = []
@@ -187,6 +198,7 @@ def scan_and_sweep() -> int:
             if derive_state(a, now) == 'lost':
                 a['session'] = False
                 a['status'] = 'offline'
+                lost_names.append(a.get('name'))
             # ② 删除判定（顺序在①之后：先下线再计保留期）
             if _should_delete(a, now):
                 removed_names.append(a.get('name'))
@@ -196,9 +208,22 @@ def scan_and_sweep() -> int:
         return None
 
     update_json_atomic(AGENTS_FILE, [], _mut)   # R4：全局锁内 read-modify-write
+
+    # 动作日志：失联下线 + 删除（只追加，JSONL；幂等——已 offline 的记录不再触发 lost）
+    ts = now_iso()
+    for name in lost_names:
+        if not name:
+            continue
+        append_jsonl(SWEEP_LOG, {"ts": ts, "name": name, "action": "lost_to_offline",
+                                 "reason": "no heartbeat > LOST_TIMEOUT (1200s)"})
+        append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "lost"})
     for name in removed_names:
-        if name:
-            delete_agent_read_set(name)         # D4：删除 agent_read_<name>.json
+        if not name:
+            continue
+        delete_agent_read_set(name)         # D4：删除 agent_read_<name>.json
+        append_jsonl(SWEEP_LOG, {"ts": ts, "name": name, "action": "deleted",
+                                 "reason": "offline/lost beyond retention (LOST_TIMEOUT+6h, 22800s)"})
+        append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "deleted"})
     return len(removed_names)
 
 
@@ -271,6 +296,11 @@ def set_session(name, active):
             a["status"] = "working" if active else "offline"
             a["last_seen"] = now_iso()
             save_agents(agents)
+            append_jsonl(STATUS_EVENTS_LOG, {
+                "ts": now_iso(),
+                "name": name,
+                "event": "session_on" if active else "session_off",
+            })
             return True
     return False
 

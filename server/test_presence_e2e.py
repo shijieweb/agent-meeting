@@ -161,6 +161,13 @@ def test_presence_lifecycle(isolated):
                 {"sender_type": "user", "content": "x", "target_type": "single",
                  "target_agent_name": "TestAgent"})
     assert s == 400
+    # 并入项：JSONL 日志已落盘（sweep_log + status_events）
+    for log_name in ("sweep_log.jsonl", "status_events.jsonl"):
+        log_path = os.path.join(data_dir, log_name)
+        assert os.path.isfile(log_path), log_name + " should exist"
+        with open(log_path, encoding="utf-8") as f:
+            content = f.read()
+        assert "TestAgent" in content, log_name + " should contain TestAgent"
 
     # ---- 6. /api/agents 默认仅在线（R3 分母语义）----
     for n in ("Online1", "Online2", "Offline1"):

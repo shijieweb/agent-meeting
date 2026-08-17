@@ -126,6 +126,20 @@ def delete_agent_read_set(agent_name: str) -> bool:
         return False
 
 
+def append_jsonl(name: str, record: dict) -> None:
+    """追加一行 JSON 到 DATA_DIR/<name>（JSONL 日志，如 sweep_log.jsonl / status_events.jsonl）。
+
+    持 `_lock`；文件不存在则创建；**只追加不覆盖**（append 模式）。
+    行格式：单行紧凑 JSON（ensure_ascii=False，中文可读）。record 必须可 JSON 序列化。
+    """
+    with _lock:
+        p = _path(name)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        line = json.dumps(record, ensure_ascii=False) + "\n"
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(line)
+
+
 def mark_agent_read(agent_name: str, message_ids) -> None:
     """在锁内把若干消息 id 加入该 agent 的已读集合（read-modify-write 原子）。
 
