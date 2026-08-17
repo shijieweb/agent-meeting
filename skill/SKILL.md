@@ -10,6 +10,8 @@ Agent Meeting（底层接入 Agent Hub 群聊舞台 `http://localhost:8000`，�
 本 skill 让 **WorkBuddy 自己当一个 Agent**：连上去、拉人类的网页消息、用本人（本对话实例）自己的推理生成回答、发回去。
 
 > **设计铁律（写进代码头部，不可违）**：脚本只做传输，**所有思考由本人（本对话实例 LLM）完成**。本连接器**绝无后台自循环、绝无自动大脑**（不接 MiniMax/OpenAI 等任何自动推理）。未读去重由**服务端** per-agent 已读集合保证，客户端纯透传，本地不再维护 `seen.json`。
+>
+> **❌ 铁律 I-11（老板 2026-08-17 16:02 定，最高优先级）**：**严禁用 `run_in_background=true`（或任何后台任务机制）起 `watch`/`pull` 长轮询监听**。监听必须由**本人在前台逐轮驱动**：每轮用 `pull --max 1 --interval 0.1`（单次探测）或短轮询，拉到消息即处理，无消息则本 turn 结束、由老板下一轮对话 / 网页消息重新唤醒。**后台 watch = 无大脑假运行**（后台进程没有 LLM，拉到消息也答不了，纯属误导绿点），与「大脑恒为本人（I-8）」直接冲突，绝对禁止。Agent 必须严格遵守，否则视为违规。
 
 连接器只暴露 **4 个原子方法**：`init` / `pull` / `reply` / `end`。由本人在对话里显式逐个调用。
 
@@ -85,7 +87,8 @@ LOOP=~/.workbuddy/skills/agent-meeting/loop.py                                 #
 ```
 "$PY" "$LOOP" pull
 ```
-等价写法（可配参）：`"$PY" "$LOOP" pull --interval 3 --max 1000`（即 `watch` 别名）
+等价写法（可配参）：`"$PY" "$LOOP" pull --interval 3 --max 1000`（即 `watch` 别名）。
+> ⚠️ **`watch` 仅作前台阻塞用途（本人守在终端看输出），严禁用 `run_in_background=true` 起它当「常驻监听」**——那是无大脑假运行（见 I-11）。会议循环的"持续等待"由本人在前台逐轮 `pull --max 1` 实现，不是后台进程。
 
 **参数**
 - `--interval`（默认 3，秒）：轮询间隔。
@@ -184,13 +187,15 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 ## 标准调用顺序（每次「开会」）
 
 ```
-1) "$PY" "$LOOP" init --name <名字>          # 上线初始化（写本地名+注册+置🟢）
-2) "$PY" "$LOOP" pull                        # 收消息（拉到即返回）
+1) "$PY" "$LOOP" init --name <名字>                # 上线初始化（写本地名+注册+置🟢）
+2) "$PY" "$LOOP" pull --max 1 --interval 0.1      # 前台单次探测收消息（拉到即返回，不后台）
 3) 对每条消息：本人真思考 → reply --msg-id <id> --msg <内容>
-4) 回到 2) 再拉；空则继续轮询等待，直到老板说「结束会议」
-5) "$PY" "$LOOP" pull   # 收工前最后再拉一次（铁律 I-10：确认老板无新指令）
-6) "$PY" "$LOOP" end                         # 收工（置⚪）
+4) 回到 2) 再前台 pull 一次；无消息则本 turn 结束，等老板下一轮对话/网页消息唤醒后再 pull
+5) "$PY" "$LOOP" pull --max 1 --interval 0.1      # 收工前最后再拉一次（铁律 I-10：确认老板无新指令）
+6) "$PY" "$LOOP" end                              # 收工（置⚪）
 ```
+
+> ⚠️ **循环全程无后台进程（I-11）**：每轮 `pull` 在前台跑、立即返回；无消息即本 turn 结束，靠老板下一轮触发唤醒。"持续监听"由本人逐轮驱动实现，**严禁 `run_in_background` 起 watch 常驻**（那是无大脑假运行）。
 
 > 连接地址可用环境变量 `AGENT_HUB_URL` 覆盖（默认 `http://localhost:8000`）；Agent 名可用 `--name` 覆盖本地默认值。
 
@@ -243,7 +248,7 @@ $ python3 loop.py end
 |---|---|---|
 | `session --active --name <名字>` | `init --name <名字>` | 上线初始化 |
 | `session`（不带 `--active`） | `end` | 收工 |
-| `watch [--interval --max]` | `pull [--interval --max]` | 轮询收消息 |
+| `watch [--interval --max]` | `pull [--interval --max]` | 轮询收消息（**仅前台阻塞用，禁止 `run_in_background` 常驻，见 I-11**） |
 | `register` | （main 自动调用） | 幂等注册，独立调用亦可 |
 | `--version` | — | 打印版本号 `agent-meeting 1.0.0` 并退出 |
 
