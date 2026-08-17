@@ -44,9 +44,24 @@ html, body {
   color: #1f2329;
 }
 
-/* ---- 状态点四态语义色（删除 lost 态，19:44 会话中一律处理中）----
-   注：顶层状态栏(#agent-status)已移除，以下 .status-dot 规则一并删除，
-   保留此处注释以说明历史用途。*/
+/* ---- 顶层状态栏：右上角 agent 在线/状态点（R1 恢复）---- */
+.agent-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;            /* 顶到 header 右侧（header 已是 flex）*/
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.status-dot {
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 11px;
+  white-space: nowrap;
+}
+.status-dot.working { background: #E8F4FD; color: #2AABEE; }
+.status-dot.waiting { background: #FFF4E1; color: #E08A00; }
+.status-dot.idle { background: #f0f0f0; color: #999; }
 #message-list {
   flex: 1;
   min-height: 0;
@@ -98,17 +113,20 @@ html, body {
   font-size: 14px;
   line-height: 1.5;
   word-break: break-word;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.08);   /* R3：轻微投影，提升气泡层次感 */
 }
 .msg-row.msg-in .msg-bubble { background: #E8F4FD; color: #1f2329; border-bottom-left-radius: 4px; }
 .msg-row.msg-out .msg-bubble { background: #EFFDDE; color: #1f2329; border-bottom-right-radius: 4px; }
-.msg-content .agent-name { font-size: 12px; color: #2AABEE; font-weight: 600; margin-bottom: 3px; }
-.msg-bubble.agent h3 { font-size: 1.05em; font-weight: 700; margin: 6px 0 4px; }
-.msg-bubble.agent h4 { font-size: 1em; font-weight: 700; margin: 6px 0 4px; }
-.msg-bubble.agent p { margin: 4px 0; }
-.msg-bubble.agent ul { margin: 4px 0 4px 18px; padding: 0; }
-.msg-bubble.agent li { margin: 2px 0; }
-.msg-bubble.agent code { background: rgba(0, 0, 0, 0.08); padding: 1px 4px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
-.msg-bubble.agent blockquote { border-left: 3px solid #bcd; margin: 4px 0; padding: 2px 8px; color: #555; }
+/* R3：发送者名留白更舒展 */
+.msg-content .agent-name { font-size: 12px; color: #2AABEE; font-weight: 600; margin-bottom: 4px; letter-spacing: 0.2px; }
+/* R3：markdown 元素视觉打磨，贴近参考 HTML 观感 */
+.msg-bubble.agent h3 { font-size: 1.05em; font-weight: 700; margin: 8px 0 4px; }
+.msg-bubble.agent h4 { font-size: 1em; font-weight: 700; margin: 8px 0 4px; }
+.msg-bubble.agent p { margin: 5px 0; }
+.msg-bubble.agent ul { margin: 5px 0 5px 20px; padding: 0; }
+.msg-bubble.agent li { margin: 3px 0; }
+.msg-bubble.agent code { background: rgba(42, 171, 238, 0.12); padding: 2px 5px; border-radius: 4px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.88em; color: #1c6f97; }
+.msg-bubble.agent blockquote { border-left: 3px solid #2AABEE; margin: 6px 0; padding: 4px 10px; color: #555; background: rgba(42, 171, 238, 0.06); border-radius: 0 6px 6px 0; }
 .msg-bubble.agent strong { font-weight: 700; }
 
 /* 已读回执（出站 user 行下方，右对齐）*/
@@ -122,7 +140,7 @@ html, body {
 /* ---- 输入区（flex 列直接子项 flex-shrink:0 钉底，dvh + safe-area 抗 IME 遮挡）---- */
 .input-area {
   display: flex;
-  align-items: flex-end;
+  align-items: center;          /* R4：输入/下拉/发送按中线对齐 */
   gap: 8px;
   flex-shrink: 0;
   padding: 8px 12px;
@@ -164,6 +182,7 @@ html, body {
   flex-shrink: 0;
   min-width: 64px;
   max-width: 100px;
+  height: 40px;                /* R4：与输入框/发送按钮等高，消除「低了一截」*/
   font-size: 13px;
   padding: 8px 6px;
   border-radius: 10px;
@@ -193,3 +212,16 @@ html, body {
   white-space: nowrap;
 }
 .new-msg-banner:hover { background: rgba(0, 0, 0, 0.85); }
+
+/* ---- F1：居中的系统提示（加入/离开群组），#message-list 为 flex 列，align-self 居中 ---- */
+.sys-notice {
+  align-self: center;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  margin: 8px auto;
+  background: rgba(0, 0, 0, 0.045);
+  padding: 3px 12px;
+  border-radius: 11px;
+  max-width: 80%;
+}

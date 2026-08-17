@@ -1,4 +1,5 @@
 let currentAgentList = [];
+let prevAgentStates = null;     // F1：上一次 agent 在线态快照（name -> true/false），用于 join/leave 提示
 
 // ---- 增量加载 / 浮动提示 模块级状态（T-meeting-incremental）----
 let clientNewestId = null;     // 当前已渲染的最新消息 id（展示用）
@@ -141,6 +142,33 @@ async function loadAgents() {
     if (prev && Array.from(select.options).some(o => o.value === prev)) {
       select.value = prev;
     }
+
+    // F1：前端 diff agent 在线/离线状态，在 30s 轮询中发出「X 加入了群组 / 离开了群组」提示。
+    // 注：/api/agents 仅返回名字数组，状态(session/status)需另取自 /api/agents/status。
+    try {
+      const sres = await fetch('/api/agents/status');
+      const sdata = await sres.json();
+      const agentsArr = sdata.agents || [];
+      const currentOnline = {};
+      agentsArr.forEach(a => {
+        const name = a.name || '';
+        currentOnline[name] = a.status === 'working' || a.status === 'waiting' || a.session === true;
+      });
+      if (prevAgentStates === null) {
+        // 首帧快照：不弹「已在线」通知（避免刷新即对在线 agent 发「加入」）
+        prevAgentStates = currentOnline;
+      } else {
+        // 取并集，覆盖「曾经在线但本次状态列表未返回（视为离线）」的边界情况
+        const names = new Set([...Object.keys(prevAgentStates), ...Object.keys(currentOnline)]);
+        names.forEach(name => {
+          const wasOnline = prevAgentStates[name] === true;
+          const nowOnline = currentOnline[name] === true;
+          if (nowOnline && !wasOnline) insertSystemNotice(name + ' 加入了群组');
+          else if (!nowOnline && wasOnline) insertSystemNotice(name + ' 离开了群组');
+        });
+        prevAgentStates = currentOnline;
+      }
+    } catch (e) { /* 状态接口异常不阻断下拉刷新 */ }
   } catch (e) {
     // 旧的缓存 JS 可能读到新 DOM（无 #agent-select）或 /api/agents 异常。
     // 下拉框失败不阻断首屏消息列表渲染，避免产生白屏。
@@ -355,6 +383,17 @@ function onListScroll() {
 function scrollToBottom() {
   const list = document.getElementById('message-list');
   list.scrollTop = list.scrollHeight - list.clientHeight;
+}
+
+// F1：在消息列表中央插入一条系统提示（X 加入了群组 / 离开了群组），非消息气泡、不入 msg-row。
+function insertSystemNotice(text) {
+  const list = document.getElementById('message-list');
+  if (!list) return;
+  const div = document.createElement('div');
+  div.className = 'sys-notice';
+  div.textContent = text;
+  list.appendChild(div);
+  scrollToBottom();
 }
 
 function isNearBottom() {
