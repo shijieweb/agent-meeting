@@ -145,7 +145,7 @@ html, body {
   align-self: flex-end;
 }
 
-/* ---- 输入区（sticky 底，dvh + safe-area 抗 IME 遮挡）---- */
+/* ---- 输入区（flex 列直接子项 flex-shrink:0 钉底，dvh + safe-area 抗 IME 遮挡）---- */
 .input-area {
   display: flex;
   align-items: flex-end;
