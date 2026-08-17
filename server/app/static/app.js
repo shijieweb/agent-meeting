@@ -1,10 +1,12 @@
 let currentAgentList = [];
 
 // ---- 增量加载 / 浮动提示 模块级状态（T-meeting-incremental）----
-let clientNewestId = null;     // 当前已渲染的最新消息 id（since 游标基准）
+let clientNewestId = null;     // 当前已渲染的最新消息 id（展示用）
 let clientOldestId = null;     // 当前已渲染的最旧消息 id（before 游标基准）
+let pollCursorId = null;       // 轮询游标：只由「服务端返回的消息」推进，乐观发送不推进（BUG-C 修复）
 let insertedIds = new Set();   // 已插入消息 id 集合，去重幂等（AC-2.3）
 let loadingOlder = false;      // 触顶加载守卫，防并发重入
+let noMoreOlder = false;       // 已到最早历史，停止发起 before_id 请求（风险-B 修复）
 let isAtBottom = true;         // 用户是否位于列表最底层
 const BOTTOM_THRESHOLD = 4;    // 距底/距顶 ≤4px 视为「在底部」/「触顶」
 let bannerTimer = null;        // 浮动提示自动消失计时器句柄
@@ -40,7 +42,7 @@ async function init() {
   await loadAgents();
   await loadInitialPage();      // 首屏只取一页（?limit=30），取代全量 loadHistory
   await loadAgentStatus();
-  setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id）
+  setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
   setInterval(loadAgentStatus, 3000); // 每3秒刷新阿编在线状态（pull 即心跳）
   const list = document.getElementById('message-list');
   if (list) {
@@ -65,14 +67,11 @@ async function loadAgentStatus() {
     const ageSec = (Date.now() - new Date(me.last_seen).getTime()) / 1000;
     let cls, label, showHint = false;
     if (me.status === 'offline') {
-      // 通过「结束会议」正常收工
       cls = 'idle'; label = '阿编·已收工';
     } else {
-      // 会话中：pull 间隙窗口放宽到 600s；非会话：120s
       const aliveWindow = me.session ? 600 : 120;
       if (ageSec > aliveWindow) {
         if (me.session) {
-          // 会话仍 active 但大脑循环意外中断 → 需重唤（老板要的"为什么离线"）
           cls = 'lost'; label = '阿编·已掉线·需重唤'; showHint = true;
         } else {
           cls = 'idle'; label = '阿编·离线';
@@ -113,26 +112,39 @@ async function loadInitialPage() {
     insertedIds.clear();
     clientNewestId = null;
     clientOldestId = null;
+    pollCursorId = null;
+    noMoreOlder = false;
     (data.messages || []).forEach(msg => appendMessage(msg));
+    // appendMessage 已初始化 clientOldestId/clientNewestId；轮询游标同步到最新（BUG-A 修复）
+    pollCursorId = clientNewestId;
     if (isAtBottom) scrollToBottom();
   } catch (e) { /* 首屏失败不阻断 */ }
 }
 
-// 2s 增量轮询：只拉 since_id 之后的新消息，顺序 appendMessage（AC-2.1）
+// 2s 增量轮询：带 since_id 拉取轮询游标之后的新消息；空会议室降级为首屏语义（风险-E 修复）
 async function pollNew() {
-  if (clientNewestId === null) return;  // 首屏未完成不轮询
   try {
-    const res = await fetch('/api/messages/history?since_id=' + encodeURIComponent(clientNewestId));
+    let url = '/api/messages/history';
+    if (pollCursorId !== null && pollCursorId !== undefined) {
+      url += '?since_id=' + encodeURIComponent(pollCursorId);
+    } else {
+      url += '?limit=30';  // 首屏为空时降级拉取，避免永不刷新（风险-E）
+    }
+    const res = await fetch(url);
     const data = await res.json();
     const msgs = data.messages || [];
     if (msgs.length === 0) return;
     const atBottomBefore = isAtBottom;
     let newCount = 0;
+    let lastServerId = null;
     msgs.forEach(msg => {
+      lastServerId = msg.id;
       if (insertedIds.has(msg.id)) return; // 去重幂等
       appendMessage(msg);
       newCount++;
     });
+    // 轮询游标只由服务端返回的消息推进，乐观发送不推进（BUG-C 修复：不丢更早的 agent 回复）
+    if (lastServerId !== null) pollCursorId = lastServerId;
     // 非底部时弹浮动提示，N = 本次实际新增条数（AC-3.1）；底部不弹（AC-3.4）
     if (!atBottomBefore && newCount > 0) {
       showNewMessageBanner(newCount);
@@ -168,12 +180,13 @@ function buildMessageNodes(msg) {
   return nodes;
 }
 
-// 追加到列表底部；去重、更新 newest 游标；仅底部时滚底（AC-1.2/2.2/3.4）
+// 追加到列表底部；去重、初始化 oldest、更新 newest 游标；仅底部时滚底（AC-1.2/2.2/3.4）
 function appendMessage(msg) {
   if (insertedIds.has(msg.id)) return;
   const list = document.getElementById('message-list');
   buildMessageNodes(msg).forEach(n => list.appendChild(n));
   insertedIds.add(msg.id);
+  if (clientOldestId === null) clientOldestId = msg.id; // BUG-A 修复：首屏/任意路径都初始化 oldest
   clientNewestId = msg.id;
   if (isAtBottom) scrollToBottom();
 }
@@ -191,7 +204,7 @@ function prependMessage(msg) {
 
 // 触顶加载更早一页：before 游标前置插入并补偿 scrollTop 保持视口不跳动（AC-4.1/4.2）
 async function loadOlder() {
-  if (clientOldestId === null || loadingOlder) return;
+  if (noMoreOlder || clientOldestId === null || loadingOlder) return;
   loadingOlder = true;
   try {
     const list = document.getElementById('message-list');
@@ -200,9 +213,13 @@ async function loadOlder() {
     const res = await fetch('/api/messages/history?before_id=' + encodeURIComponent(clientOldestId) + '&limit=30');
     const data = await res.json();
     const msgs = data.messages || [];
-    // before 返回升序（最接近游标在前），reverse 后逐条 prepend 保持顺序正确
-    msgs.slice().reverse().forEach(msg => prependMessage(msg));
-    // 补偿滚动位置：插入前 scrollTop + 插入内容高度，视口锚定不动
+    if (msgs.length === 0) {
+      noMoreOlder = true; // 已无更早历史，停止发起 before_id 请求（风险-B 修复）
+    } else {
+      // before 返回升序（最接近游标在前），reverse 后逐条 prepend 保持顺序正确
+      msgs.slice().reverse().forEach(msg => prependMessage(msg));
+    }
+    // 补偿滚动位置：插入前 scrollTop + 插入内容高度，视口锚定不动（即使为空也不抖动）
     list.scrollTop = prevScrollTop + (list.scrollHeight - prevScrollHeight);
   } catch (e) { /* 失败不阻断 */ }
   finally {
@@ -213,8 +230,8 @@ async function loadOlder() {
 function onListScroll() {
   const list = document.getElementById('message-list');
   isAtBottom = isNearBottom();
-  // 触顶（距顶 ≤ 阈值）且未在加载更早时，自动加载更早一页
-  if (list.scrollTop < BOTTOM_THRESHOLD && !loadingOlder) {
+  // 触顶（距顶 ≤ 阈值）且未在加载更早、且仍有更早历史时，自动加载更早一页
+  if (list.scrollTop < BOTTOM_THRESHOLD && !loadingOlder && !noMoreOlder) {
     loadOlder();
   }
 }
@@ -277,9 +294,18 @@ async function sendMessage() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+  // BUG-D 修复：发送失败（如 single 目标 agent 不存在）不追加、不污染游标，避免退化为全量回放
+  if (!res.ok) {
+    input.value = '';
+    return;
+  }
   const data = await res.json();
   input.value = '';
+  if (!data || !data.message_id) {
+    return;
+  }
   // 乐观追加：用返回的 message_id + 输入框 content 即时可见（AC-5.1/5.2），不走全量 loadHistory
+  // 注意：此处只推进展示游标 clientNewestId，不推进轮询游标 pollCursorId（BUG-C 修复）
   const optimisticMsg = {
     id: data.message_id,
     content: content,
