@@ -1,0 +1,137 @@
+{
+  "pass": 26,
+  "fail": 0,
+  "total": 26,
+  "results": [
+    {
+      "name": "R1 desktop: #agent-status exists in header",
+      "pass": true,
+      "detail": "el=True inHeader=True"
+    },
+    {
+      "name": "R1 desktop: >=1 .status-dot visible & right-aligned",
+      "pass": true,
+      "detail": "dots=2 visible=True rightGap=12 geo={'sbRight': 1108, 'hbRight': 1120, 'sbLeft': 881, 'hbLeft': 160, 'hbW': 960, 'rightGap': 12}"
+    },
+    {
+      "name": "R4 desktop: select/input height & center aligned (<=2.5px)",
+      "pass": true,
+      "detail": "selH=40px inp=42px hDiff=2 centerDiff=0"
+    },
+    {
+      "name": "R3 desktop: .msg-bubble has box-shadow",
+      "pass": true,
+      "detail": "shadowOk=True"
+    },
+    {
+      "name": "R3 desktop: markdown renders strong/code/ul/blockquote",
+      "pass": true,
+      "detail": "{'available': True, 'html': '<p><strong>粗体</strong> 和 <code>代码</code></p><ul><li>列表项</li></ul><blockquote>引用</blockquote>', 'hasStrong': True, 'hasCode': True, 'hasUl': True, 'hasBlock': True}"
+    },
+    {
+      "name": "REG6 desktop: #agent-select options >=2 (agent names listed)",
+      "pass": true,
+      "detail": "opts=['all', 'WorkBuddy', 'xiaobian']"
+    },
+    {
+      "name": "REG5 desktop: send -> .msg-out bubble appears",
+      "pass": true,
+      "detail": "sent='【QA独立验证】发送回归 1786979871' found=True"
+    },
+    {
+      "name": "REG8 desktop: input/@select/send visible & not clipped, page not blank",
+      "pass": true,
+      "detail": "message-input:x172,y750,w780,h42 | agent-select:x960,y751,w100,h40 | send-btn:x1068,y751,w40,h40 msgCount=31 blank=False"
+    },
+    {
+      "name": "REG7 desktop: no JS exceptions / no app console errors",
+      "pass": true,
+      "detail": "pageErrors=[] consoleErrors=['CONSOLE_ERR: Failed to load resource: the server responded with a status of 404 (Not Found)'] note='sole console msg is /favicon.ico 404 (pre-existing, benign)'"
+    },
+    {
+      "name": "R1 mobile: #agent-status exists in header",
+      "pass": true,
+      "detail": "el=True inHeader=True"
+    },
+    {
+      "name": "R1 mobile: >=1 .status-dot visible & right-aligned",
+      "pass": true,
+      "detail": "dots=2 visible=True rightGap=12 geo={'sbRight': 378, 'hbRight': 390, 'sbLeft': 151, 'hbLeft': 0, 'hbW': 390, 'rightGap': 12}"
+    },
+    {
+      "name": "R4 mobile: select/input height & center aligned (<=2.5px)",
+      "pass": true,
+      "detail": "selH=40px inp=42px hDiff=2 centerDiff=0"
+    },
+    {
+      "name": "R3 mobile: .msg-bubble has box-shadow",
+      "pass": true,
+      "detail": "shadowOk=True"
+    },
+    {
+      "name": "R3 mobile: markdown renders strong/code/ul/blockquote",
+      "pass": true,
+      "detail": "{'available': True, 'html': '<p><strong>粗体</strong> 和 <code>代码</code></p><ul><li>列表项</li></ul><blockquote>引用</blockquote>', 'hasStrong': True, 'hasCode': True, 'hasUl': True, 'hasBlock': True}"
+    },
+    {
+      "name": "REG6 mobile: #agent-select options >=2 (agent names listed)",
+      "pass": true,
+      "detail": "opts=['all', 'WorkBuddy', 'xiaobian']"
+    },
+    {
+      "name": "REG5 mobile: send -> .msg-out bubble appears",
+      "pass": true,
+      "detail": "sent='【QA独立验证】发送回归 1786979871' found=True"
+    },
+    {
+      "name": "REG8 mobile: input/@select/send visible & not clipped, page not blank",
+      "pass": true,
+      "detail": "message-input:x12,y794,w210,h42 | agent-select:x230,y795,w100,h40 | send-btn:x338,y795,w40,h40 msgCount=31 blank=False"
+    },
+    {
+      "name": "REG7 mobile: no JS exceptions / no app console errors",
+      "pass": true,
+      "detail": "pageErrors=[] consoleErrors=['CONSOLE_ERR: Failed to load resource: the server responded with a status of 404 (Not Found)'] note='sole console msg is /favicon.ico 404 (pre-existing, benign)'"
+    },
+    {
+      "name": "F1 struct: .sys-notice can be centered pill",
+      "pass": true,
+      "detail": "{'textAlign': 'center', 'alignSelf': 'center', 'radius': '11px', 'bg': 'rgba(0, 0, 0, 0.043)'}"
+    },
+    {
+      "name": "F1 no-spam: first load shows NO join/leave notice",
+      "pass": true,
+      "detail": "joinLeaveNotices=0"
+    },
+    {
+      "name": "F1 transition: 'xiaobian 离开了群组' appears after active=false",
+      "pass": true,
+      "detail": "leaveNotices=1 (response {'status': 'ok', 'session': False, 'has_unread': True})"
+    },
+    {
+      "name": "F1 transition: leave notice is centered",
+      "pass": true,
+      "detail": "centered=True"
+    },
+    {
+      "name": "F1 transition: 'xiaobian 加入了群组' appears after active=true",
+      "pass": true,
+      "detail": "joinNotices=1 (response {'status': 'ok', 'session': True, 'has_unread': True})"
+    },
+    {
+      "name": "F1 transition: join notice is centered",
+      "pass": true,
+      "detail": "centered=True"
+    },
+    {
+      "name": "F1 cleanup: xiaobian reverted to active=true",
+      "pass": true,
+      "detail": "xiaobian=[{'name': 'xiaobian', 'last_seen': '2026-08-17T23:19:02', 'status': 'working', 'session': True, 'has_unread': True}]"
+    },
+    {
+      "name": "REG7 transition: no JS exceptions / no app console errors during join/leave polls",
+      "pass": true,
+      "detail": "pageErrors=[] consoleErrors=['CONSOLE_ERR: Failed to load resource: the server responded with a status of 404 (Not Found)'] note='sole console msg is /favicon.ico 404 (pre-existing, benign)'"
+    }
+  ]
+}
