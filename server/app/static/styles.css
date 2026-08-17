@@ -14,7 +14,7 @@ html, body {
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
-  max-width: 480px;
+  max-width: 960px;
   margin: 0 auto;
   background: #fff;
   position: relative;
@@ -44,40 +44,9 @@ html, body {
   color: #1f2329;
 }
 
-/* 状态点容器（遍历渲染多个 .status-dot） */
-#agent-status {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-left: auto;
-  align-items: center;
-}
-
-/* ---- 状态点四态语义色（删除 lost 态，19:44 会话中一律处理中）---- */
-.status-dot {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #9e9e9e;
-  white-space: nowrap;
-}
-.status-dot::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.status-dot.working { color: #2e7d32; }
-.status-dot.working::before { background: #4caf50; box-shadow: 0 0 6px rgba(76, 175, 80, 0.7); }
-.status-dot.waiting { color: #b9760a; }
-.status-dot.waiting::before { background: #f5a623; box-shadow: 0 0 6px rgba(245, 166, 35, 0.7); }
-.status-dot.idle { color: #9e9e9e; }
-.status-dot.idle::before { background: #9e9e9e; }
-
-/* ---- 消息列表（内部滚动，非整页滚动）---- */
+/* ---- 状态点四态语义色（删除 lost 态，19:44 会话中一律处理中）----
+   注：顶层状态栏(#agent-status)已移除，以下 .status-dot 规则一并删除，
+   保留此处注释以说明历史用途。*/
 #message-list {
   flex: 1;
   min-height: 0;
@@ -88,6 +57,11 @@ html, body {
   flex-direction: column;
   gap: 10px;
   background: #fff;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge legacy */
+}
+#message-list::-webkit-scrollbar {
+  display: none;                /* Chrome/Safari/Edge */
 }
 
 /* ---- 消息行：头像 + 内容列 ---- */
@@ -127,7 +101,7 @@ html, body {
 }
 .msg-row.msg-in .msg-bubble { background: #E8F4FD; color: #1f2329; border-bottom-left-radius: 4px; }
 .msg-row.msg-out .msg-bubble { background: #EFFDDE; color: #1f2329; border-bottom-right-radius: 4px; }
-.msg-bubble .agent-name { font-size: 12px; color: #2AABEE; font-weight: 600; margin-bottom: 3px; }
+.msg-content .agent-name { font-size: 12px; color: #2AABEE; font-weight: 600; margin-bottom: 3px; }
 .msg-bubble.agent h3 { font-size: 1.05em; font-weight: 700; margin: 6px 0 4px; }
 .msg-bubble.agent h4 { font-size: 1em; font-weight: 700; margin: 6px 0 4px; }
 .msg-bubble.agent p { margin: 4px 0; }
@@ -155,15 +129,6 @@ html, body {
   border-top: 1px solid #e6e6e6;
   background: #fff;
   padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-}
-#agent-select {
-  flex-shrink: 0;
-  max-width: 90px;
-  font-size: 13px;
-  padding: 8px;
-  border-radius: 10px;
-  border: 1px solid #ddd;
-  background: #fff;
 }
 #message-input {
   flex: 1;
