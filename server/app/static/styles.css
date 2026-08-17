@@ -44,6 +44,25 @@ html, body {
   color: #1f2329;
 }
 
+/* ---- 顶层状态栏：右上角 agent 在线/状态点（A' 恢复：只显示在线/处理中/待命 agent）---- */
+.agent-status {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;            /* 顶到 header 右侧（header 已是 flex）*/
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.status-dot {
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 11px;
+  white-space: nowrap;
+}
+.status-dot.working { background: #E8F4FD; color: #2AABEE; }
+.status-dot.waiting { background: #FFF4E1; color: #E08A00; }
+.status-dot.idle { background: #f0f0f0; color: #999; }
+
 #message-list {
   flex: 1;
   min-height: 0;

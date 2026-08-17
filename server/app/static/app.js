@@ -88,7 +88,7 @@ async function init() {
 
 async function loadAgentStatus() {
   const container = document.getElementById('agent-status');
-  if (!container) return;   // 顶部状态栏已移除（老板要求），容器不存在时直接跳过，不发无效请求
+  if (!container) return;   // 容器不存在时直接跳过，不发无效请求
   try {
     const res = await fetch(API_BASE + 'api/agents/status');
     const data = await res.json();
@@ -96,38 +96,46 @@ async function loadAgentStatus() {
     container.innerHTML = '';
     (data.agents || []).forEach(a => {
       const name = a.name || '';
+      // A'（老板 22:55 纠正）：状态栏只显示「在线/处理中/待命」的 agent；
+      // 已收工（offline）、心跳超时且无会话（离线）、无 last_seen 且非活跃 一律不显示（22:04 收工态不显示）。
+      const active = a.status === 'working' || a.status === 'waiting' || a.has_unread === true;
+      if (a.status === 'offline') return;        // 已收工不显示（即使有未读）
+      if (!a.last_seen && !active) return;       // 无心跳且非活跃 → 不显示
       const dot = document.createElement('span');
       dot.className = 'status-dot';
       if (!a.last_seen) {
-        dot.classList.add('idle');
-        dot.textContent = name + '·待命';              // F9 动态名文案
+        // 无 last_seen 但活跃（working/waiting/has_unread）→ 按活跃态显示，不落 idle
+        if (a.status === 'working') {
+          dot.classList.add('working');
+          dot.textContent = name + '·处理中';
+        } else {
+          dot.classList.add('waiting');
+          dot.textContent = a.has_unread ? name + '·处理任务' : name + '·待命中';
+        }
       } else {
         const ageSec = (Date.now() - new Date(a.last_seen).getTime()) / 1000;
         if (a.status === 'offline') {
-          dot.classList.add('idle');
-          dot.textContent = name + '·已收工';
-        } else {
-          const aliveWindow = a.session ? 600 : 120;
-          if (ageSec > aliveWindow) {
-            // 19:44 修复：会话中 agent 一律"处理中"，不再判掉线/需重唤
-            if (a.session) {
-              dot.classList.add('working');
-              dot.textContent = name + '·处理中';
-            } else {
-              dot.classList.add('idle');
-              dot.textContent = name + '·离线';
-            }
-          } else if (a.status === 'working') {
+          return;  // 已收工不显示（双保险）
+        }
+        const aliveWindow = a.session ? 600 : 120;
+        if (ageSec > aliveWindow) {
+          // 19:44 修复：会话中 agent 一律"处理中"，不再判掉线/需重唤
+          if (a.session) {
             dot.classList.add('working');
             dot.textContent = name + '·处理中';
-          } else if (a.has_unread) {
-            // EXT-1：有未读但非 working —— 显示「处理任务」，区别于真待命
-            dot.classList.add('waiting');
-            dot.textContent = name + '·处理任务';
           } else {
-            dot.classList.add('waiting');
-            dot.textContent = name + '·待命中';
+            return;  // 心跳超时且无会话 → 视为离线，不显示
           }
+        } else if (a.status === 'working') {
+          dot.classList.add('working');
+          dot.textContent = name + '·处理中';
+        } else if (a.has_unread) {
+          // EXT-1：有未读但非 working —— 显示「处理任务」，区别于真待命
+          dot.classList.add('waiting');
+          dot.textContent = name + '·处理任务';
+        } else {
+          dot.classList.add('waiting');
+          dot.textContent = name + '·待命中';
         }
       }
       container.appendChild(dot);
