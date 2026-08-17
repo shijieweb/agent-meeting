@@ -16,6 +16,7 @@ from .storage import (
     update_json_atomic,
     agent_read_set_file,
     agent_read_set_exists,
+    load_agent_read_set,
     save_agent_read_set,
     mark_agent_read,
 )
@@ -157,6 +158,39 @@ def pull_messages(agent_name):
     return unread
 
 
+def agent_has_unread(name):
+    """F8 软保护用：只读判定该 agent 是否有「target 命中它且尚未 pull」的 user 消息。
+
+    判定逻辑与 pull_messages 的未读判定一致（含首次接入从 reads.json 取种子），
+    但**只读不写**——不改变任何已读状态（不创建已读集合、不标记 read_at）。
+
+    返回：True 表示存在未读 user 消息，False 表示无。
+    """
+    msgs = load_messages()
+    # 已读集合：文件已存在则直接载入；否则从 reads.json 取该 agent 已读 id 作种子（与 pull_messages 迁移一致）。
+    if not agent_read_set_exists(name):
+        seed = {
+            r["message_id"]
+            for r in load_reads()
+            if r.get("agent_name") == name and r.get("read_at") is not None
+        }
+        read_set = seed
+    else:
+        read_set = load_agent_read_set(name)
+    for msg in msgs:
+        if msg.get("sender_type") != "user":
+            continue
+        targeted = (
+            (msg.get("target_type") == "single" and msg.get("target_agent_name") == name)
+            or msg.get("target_type") == "all"
+        )
+        if not targeted:
+            continue
+        if msg["id"] not in read_set:
+            return True
+    return False
+
+
 def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=None):
     """Agent 提交回复：保存回复，并捎带返回该 Agent 剩余未读消息。对应方案书 §5.3 submit_reply。
 
@@ -254,3 +288,58 @@ def get_history(since_id=None, before_id=None, limit=30):
             d["read_by"] = []
         out.append(d)
     return out
+
+
+def cleanup_messages(keep_last=None, older_than=None):
+    """F12 归档：按条数/时间清理 messages.json（删除式归档，archived=移除条数）。
+
+    在锁内（update_json_atomic）按全序键 (created_at, 原数组下标) 升序排序后计算保留集：
+    - 若给了 keep_last：仅保留排序后最后 keep_last 条（pos >= n - keep_last）；
+    - 若给了 older_than：仅保留 created_at >= older_than 的消息（同格式字符串字典序 == 时间序）；
+    - 二者同时给：取交集（两项都满足才保留）。
+    同时清理 reads.json 中指向被移除消息的孤儿回执（message_id 不在保留集内则删），
+    保证 history 已读回执一致。
+
+    返回 {"archived":int, "remaining":int}，archived = 从 messages.json 移除的条数。
+
+    注意：update_json_atomic 写回的是被原地修改的 data，因此必须原地改 msgs（clear+extend），
+    不能只返回新列表。
+    """
+    holder = {}
+
+    def _mut_messages(msgs):
+        indexed = list(enumerate(msgs))
+        # 全序键升序：(created_at 字符串字典序, 原数组下标)
+        indexed.sort(key=lambda item: (item[1]["created_at"], item[0]))
+        n = len(indexed)
+        keep_ids = set()
+        for pos, (i, m) in enumerate(indexed):
+            keep = True
+            if keep_last is not None:
+                # 最近 keep_last 条：位置在 [n-keep_last, n) 才保留
+                if pos < n - keep_last:
+                    keep = False
+            if older_than is not None:
+                if m["created_at"] < older_than:
+                    keep = False
+            if keep:
+                keep_ids.add(m["id"])
+        kept = [m for i, m in indexed if m["id"] in keep_ids]
+        archived = n - len(kept)
+        msgs.clear()
+        msgs.extend(kept)
+        holder["archived"] = archived
+        holder["remaining"] = len(kept)
+        holder["keep_ids"] = keep_ids
+        return None
+
+    update_json_atomic(MESSAGES_FILE, [], _mut_messages)
+    keep_ids = holder.get("keep_ids", set())
+    archived = holder.get("archived", 0)
+    remaining = holder.get("remaining", 0)
+
+    def _mut_reads(reads):
+        return [r for r in reads if r.get("message_id") in keep_ids]
+
+    update_json_atomic(READS_FILE, [], _mut_reads)
+    return {"archived": archived, "remaining": remaining}

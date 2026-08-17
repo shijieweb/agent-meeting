@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Agent 注册、列表。对应方案书 §5.1 #1/#2。"""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.models.schemas import AgentRegister
-from app.services import agent_store
+from app.services import agent_store, message_store
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -15,9 +15,17 @@ def agents_status():
 
 @router.post("/{name}/session")
 def set_session_endpoint(name: str, active: bool = False):
-    """开会(active=true)置会话中(working)，结束会议(active=false)置离线(offline)。"""
+    """开会(active=true)置会话中(working)，结束会议(active=false)置离线(offline)。
+
+    F7：进入先校验该 agent 是否已注册，未注册直接 400（杜绝幽灵 agent，不调用 set_session）。
+    F8：无论如何都照常 set_session（active=false -> offline，绝不 4xx 阻断收工）；
+        随后计算 has_unread（软提示，仅提示不阻断），加入返回体。
+    """
+    if not agent_store.agent_exists(name):
+        raise HTTPException(status_code=400, detail="agent not registered: " + name)
     agent_store.set_session(name, active)
-    return {"status": "ok", "session": active}
+    has_unread = message_store.agent_has_unread(name)
+    return {"status": "ok", "session": active, "has_unread": has_unread}
 
 
 @router.post("/register")

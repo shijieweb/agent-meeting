@@ -12,6 +12,21 @@ let isAtBottom = true;         // 用户是否位于列表最底层
 const BOTTOM_THRESHOLD = 4;    // 距底/距顶 ≤4px 视为「在底部」/「触顶」
 let bannerTimer = null;        // 浮动提示自动消失计时器句柄
 
+// F3：生成 client_msg_id（UUID v4，前缀 usr_），供后端幂等去重（防网络重试重复保存）。
+function genClientMsgId() {
+  let uuid;
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    uuid = crypto.randomUUID();
+  } else {
+    uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  return 'usr_' + uuid;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -44,8 +59,9 @@ async function init() {
   await loadInitialPage();      // 首屏只取一页（?limit=30），取代全量 loadHistory
   await loadAgentStatus();
   setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
-  setInterval(loadAgentStatus, 3000); // 每3秒刷新阿编在线状态（pull 即心跳）
+  setInterval(loadAgentStatus, 3000); // 每3秒刷新在线状态（pull 即心跳）
   setInterval(refreshReadReceipts, 5000); // 每5秒同步已读回执，刷新已渲染消息的 ✓/○ 徽标
+  setInterval(loadAgents, 30000); // F6：每30秒刷新 agent 下拉，新注册 agent 自动出现、保留当前选中值
   const list = document.getElementById('message-list');
   if (list) {
     list.addEventListener('scroll', onListScroll);
@@ -56,37 +72,47 @@ async function loadAgentStatus() {
   try {
     const res = await fetch('/api/agents/status');
     const data = await res.json();
-    const me = (data.agents || []).find(a => a.name === 'WorkBuddy');
-    const dot = document.getElementById('agent-status');
+    const container = document.getElementById('agent-status');
     const hint = document.getElementById('reawaken-hint');
-    if (!dot) return;
-    if (!me || !me.last_seen) {
-      dot.className = 'status-dot idle';
-      dot.textContent = '阿编·待命';
-      if (hint) hint.style.display = 'none';
-      return;
-    }
-    const ageSec = (Date.now() - new Date(me.last_seen).getTime()) / 1000;
-    let cls, label, showHint = false;
-    if (me.status === 'offline') {
-      cls = 'idle'; label = '阿编·已收工';
-    } else {
-      const aliveWindow = me.session ? 600 : 120;
-      if (ageSec > aliveWindow) {
-        if (me.session) {
-          cls = 'lost'; label = '阿编·已掉线·需重唤'; showHint = true;
-        } else {
-          cls = 'idle'; label = '阿编·离线';
-        }
-      } else if (me.status === 'working') {
-        cls = 'working'; label = '阿编·处理中';
+    if (!container) return;
+    // F1：去掉写死单一名字的 find 过滤；复用 #agent-status 为状态点容器，遍历全部 agent 动态渲染。
+    container.innerHTML = '';
+    let anyLost = false;
+    (data.agents || []).forEach(a => {
+      const name = a.name || '';
+      const dot = document.createElement('span');
+      dot.className = 'status-dot';
+      if (!a.last_seen) {
+        dot.classList.add('idle');
+        dot.textContent = name + '·待命';              // F9 动态名文案
       } else {
-        cls = 'waiting'; label = '阿编·待命中';
+        const ageSec = (Date.now() - new Date(a.last_seen).getTime()) / 1000;
+        if (a.status === 'offline') {
+          dot.classList.add('idle');
+          dot.textContent = name + '·已收工';
+        } else {
+          const aliveWindow = a.session ? 600 : 120;
+          if (ageSec > aliveWindow) {
+            if (a.session) {
+              dot.classList.add('lost');
+              dot.textContent = name + '·已掉线·需重唤';
+              anyLost = true;
+            } else {
+              dot.classList.add('idle');
+              dot.textContent = name + '·离线';
+            }
+          } else if (a.status === 'working') {
+            dot.classList.add('working');
+            dot.textContent = name + '·处理中';
+          } else {
+            dot.classList.add('waiting');
+            dot.textContent = name + '·待命中';
+          }
+        }
       }
-    }
-    dot.className = 'status-dot ' + cls;
-    dot.textContent = label;
-    if (hint) hint.style.display = showHint ? 'block' : 'none';
+      container.appendChild(dot);
+    });
+    if (hint) hint.style.display = anyLost ? 'block' : 'none';
   } catch (e) { /* 状态接口异常不阻断聊天 */ }
 }
 
@@ -95,6 +121,7 @@ async function loadAgents() {
   const data = await res.json();
   currentAgentList = data.agents;
   const select = document.getElementById('agent-select');
+  const prev = select.value;  // F6：刷新前记录当前选中值
   select.innerHTML = '<option value="all">@所有人</option>';
   currentAgentList.forEach(name => {
     const opt = document.createElement('option');
@@ -102,6 +129,10 @@ async function loadAgents() {
     opt.textContent = name;
     select.appendChild(opt);
   });
+  // F6：重建 options 后还原选中值（若新列表仍包含原选项），既有 Agent 不丢、新注册自动出现
+  if (prev && Array.from(select.options).some(o => o.value === prev)) {
+    select.value = prev;
+  }
 }
 
 // 首屏：只取最新一页（?limit=30），顺序 appendMessage，初始化游标与去重集（AC-1.1）
@@ -256,8 +287,10 @@ async function loadOlder() {
 // 周期性已读回执同步：拉取最新 read_by 并原地刷新已渲染消息的徽标。
 // 仅更新已登记节点、跳过无变化项，绝不重建气泡或 innerHTML 清空，保留增量加载（AC-1.2）。
 async function refreshReadReceipts() {
+  // F10：无已渲染 user 消息（空聊天）时跳过轮询请求，避免无谓的 history 拉取
+  if (readStatusNodes.size === 0) return;
   try {
-    const res = await fetch('/api/messages/history?limit=10000');
+    const res = await fetch('/api/messages/history?limit=200');  // F5：有界拉取（仅用于刷新已渲染消息的 ✓/○ 徽标）
     const data = await res.json();
     (data.messages || []).forEach(msg => {
       if (!insertedIds.has(msg.id)) return;        // 只处理已渲染的消息
@@ -331,7 +364,8 @@ async function sendMessage() {
     sender_type: 'user',
     content: content,
     target_type: target === 'all' ? 'all' : 'single',
-    target_agent_name: target === 'all' ? null : target
+    target_agent_name: target === 'all' ? null : target,
+    client_msg_id: genClientMsgId()   // F3：携带非空 client_msg_id 启用后端幂等
   };
   const res = await fetch('/api/messages/send', {
     method: 'POST',

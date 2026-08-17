@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Pydantic 数据模型（请求体校验）。"""
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 
 
 class AgentRegister(BaseModel):
@@ -9,7 +9,8 @@ class AgentRegister(BaseModel):
 
 
 class MessageSend(BaseModel):
-    sender_type: str = "user"
+    # F2：锁定 sender_type 只能是 "user"。省略 -> 默认 "user"(200)；非 user -> Pydantic 422 拒收不入库。
+    sender_type: Literal["user"] = "user"
     content: str = Field(..., min_length=1, max_length=100000)
     target_type: str = Field(..., pattern="^(single|all)$")
     target_agent_name: Optional[str] = None
