@@ -31,7 +31,8 @@ agent-meeting/
 │   ├── run.sh / run.bat   # 启动脚本
 │   ├── test_smoke.py      # 冒烟测试
 │   ├── 接入指令书.md       # 后端接入说明
-│   └── 设计文档.md         # 系统设计文档
+│   ├── 设计文档.md         # 系统设计文档
+│   └── legacy/            # 历史原型（仍有未来用途的早期脚本，标注协议/依赖）
 ├── README.md              # 本文件（项目总览）
 └── .gitignore
 ```
@@ -88,6 +89,14 @@ irm https://raw.githubusercontent.com/shijieweb/agent-meeting/main/install.ps1 |
 | `end` | 无 | 收工：置⚪离线 |
 
 完整执行流程、服务端去重机制与工程细节见 [`skill/SKILL.md`](./skill/SKILL.md)。
+
+---
+
+## 📦 历史原型（legacy）
+
+`server/legacy/` 收纳**仍有未来用途**的早期原型（如多 Agent 评审流的本地联调脚本 `agent_sim.py` / `boss_driver.py`），统一在 monorepo 维护。已被 FastAPI 8000 取代且后续不再使用的代码（如 Flask 5000 的 `server.py`）**不在此目录**。
+
+> ⚠️ 这些脚本面向早期 Flask 5000 的 room 协议，**不是**当前 8000 的 `agents/messages` 协议，直接对 8000 运行会失败；适配计划见 [`server/legacy/README.md`](./server/legacy/README.md) 的「后续合入计划」。
 
 ---
 
