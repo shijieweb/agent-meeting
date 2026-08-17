@@ -59,6 +59,7 @@ async function init() {
   await loadInitialPage();      // 首屏只取一页（?limit=30），取代全量 loadHistory
   await loadAgentStatus();
   setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
+  setInterval(loadAgentStatus, 3000); // 每3秒刷新在线状态（pull 即心跳）
   setInterval(refreshReadReceipts, 5000); // 每5秒同步已读回执，刷新已渲染消息的 ✓/○ 徽标
   setInterval(loadAgents, 30000); // F6：每30秒刷新 agent 下拉，新注册 agent 自动出现、保留当前选中值
   const list = document.getElementById('message-list');
@@ -123,27 +124,21 @@ async function loadAgentStatus() {
 }
 
 async function loadAgents() {
-  try {
-    const res = await fetch('/api/agents');
-    const data = await res.json();
-    currentAgentList = data.agents;
-    const select = document.getElementById('agent-select');
-    if (!select) return;   // no picker UI, but keep currentAgentList fresh
-    const prev = select.value;  // F6：刷新前记录当前选中值
-    select.innerHTML = '<option value="all">@所有人</option>';
-    currentAgentList.forEach(name => {
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
-      select.appendChild(opt);
-    });
-    // F6：重建 options 后还原选中值（若新列表仍包含原选项），既有 Agent 不丢、新注册自动出现
-    if (prev && Array.from(select.options).some(o => o.value === prev)) {
-      select.value = prev;
-    }
-  } catch (e) {
-    // 旧的缓存 JS 可能读到新 DOM（无 #agent-select）或 /api/agents 异常。
-    // 下拉框失败不阻断首屏消息列表渲染，避免产生白屏。
+  const res = await fetch('/api/agents');
+  const data = await res.json();
+  currentAgentList = data.agents;
+  const select = document.getElementById('agent-select');
+  const prev = select.value;  // F6：刷新前记录当前选中值
+  select.innerHTML = '<option value="all">@所有人</option>';
+  currentAgentList.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+  // F6：重建 options 后还原选中值（若新列表仍包含原选项），既有 Agent 不丢、新注册自动出现
+  if (prev && Array.from(select.options).some(o => o.value === prev)) {
+    select.value = prev;
   }
 }
 
@@ -238,12 +233,7 @@ function buildMessageNodes(msg) {
     bubble.textContent = msg.content;
   } else {
     bubble.classList.add('agent');
-    // 发送者名字置于气泡上方（.msg-content 首个子节点），与气泡保留 3px 间距
-    const nameEl = document.createElement('div');
-    nameEl.className = 'agent-name';
-    nameEl.textContent = msg.sender_agent_name + ':';
-    content.appendChild(nameEl);
-    bubble.innerHTML = renderMarkdown(msg.content);
+    bubble.innerHTML = '<div class="agent-name">' + escapeHtml(msg.sender_agent_name) + ':</div>' + renderMarkdown(msg.content);
   }
   content.appendChild(bubble);
   row.appendChild(avatar);
@@ -432,8 +422,7 @@ async function sendMessage() {
   const input = document.getElementById('message-input');
   const content = input.value.trim();
   if (!content) return;
-  const sel = document.getElementById('agent-select');
-  const target = sel ? sel.value : 'all';
+  const target = document.getElementById('agent-select').value;
   const payload = {
     sender_type: 'user',
     content: content,

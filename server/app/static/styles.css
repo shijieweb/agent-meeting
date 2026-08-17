@@ -158,6 +158,21 @@ html, body {
 #send-btn:hover { background: #1e9bd8; }
 #send-btn:active { background: #1886bd; }
 
+/* ---- 选人下拉框（回归A：恢复被误删的 @ 选择器，放在输入框右侧）---- */
+#agent-select,
+.agent-select {
+  flex-shrink: 0;
+  min-width: 64px;
+  max-width: 100px;
+  font-size: 13px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #1f2329;
+}
+#agent-select option { color: #1f2329; }
+
 /* ---- 微信式浮动新消息提示 ---- */
 .new-msg-banner {
   position: fixed;
