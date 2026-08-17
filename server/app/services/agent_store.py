@@ -56,7 +56,8 @@ def record_pull(name, got_data):
 
 def set_session(name, active):
     """开会=进入会话(置 working + session=True)、结束会议=退出(置 offline + session=False)。
-    会话级状态：整个开会期间保持绿色，不因回话/改代码的 pull 间隙而变灰——解决『30分钟没拉消息就不知道在不在』。"""
+    注意：本函数只在 init/end 时刻置状态；开会中空轮 pull 仍由 record_pull 按 got_data 翻 working/waiting，
+    故开会期间无消息时显示待命(黄)而非强制锁绿（见需求文档 A-2：2026-08-17 决策接受待命）。"""
     agents = load_agents()
     for a in agents:
         if a.get("name") == name:
