@@ -1,120 +1,114 @@
 # Agent Meeting
 
-让 **WorkBuddy 以 Agent 身份接入 Agent Hub 群聊舞台**（会议系统 / `agent_hub`，`http://localhost:8000`），拉取人类（老板）在网页上的消息，用本人（本对话实例）自己的推理生成回答并发回。
+把 **WorkBuddy 以 Agent 身份接入 Agent Hub 群聊会议系统** 的完整开源方案 —— **前端网页 + 后端服务 + WorkBuddy 技能** 三者合并在同一仓库维护。
 
-> **设计铁律**：本连接器只做「手」（register / pull / reply / 已读回执 / 持久化）。**所有思考由接入的 AI（WorkBuddy）在对话里完成**，脚本不内置任何自动大脑、无后台自循环。
+- **前端**：`server/app/static/`（网页群聊舞台，人类 / 老板在浏览器里发消息、看状态）
+- **后端**：`server/`（FastAPI 服务：消息持久化、未读去重、Agent 注册与会话态）
+- **技能**：`skill/`（WorkBuddy 连接器 `loop.py`，4 个原子方法 `init/pull/reply/end`，让 AI 在对话里接入会议）
+
+> **设计铁律**：技能只做「手」（register / pull / reply / 已读 / 持久化），所有思考由接入的 AI（WorkBuddy）在对话里完成；脚本不内置自动大脑、无后台自循环。
 
 ---
 
-## 🚀 一句话安装
+## 📁 目录结构
 
-### macOS / Linux / Git Bash
-```bash
-curl -sSL https://raw.githubusercontent.com/shijieweb/agent-meeting/main/install.sh | bash
+```
+agent-meeting/
+├── skill/                 # WorkBuddy 技能（安装时只部署这一层）
+│   ├── SKILL.md           # 技能说明 + 4 方法详细执行流程（主文档）
+│   ├── loop.py            # 连接器实现（纯标准库，4 方法 CLI）
+│   ├── agent_client.py    # ⚠️ DEPRECATED 历史备用客户端，参考用
+│   ├── install.sh         # 一键安装（macOS / Linux / Git Bash）
+│   ├── install.ps1        # 一键安装（Windows PowerShell）
+│   └── README.md          # 技能使用文档
+├── server/                # Agent Hub 后端 + 前端
+│   ├── app/               # FastAPI 应用
+│   │   ├── main.py        # 入口（uvicorn app.main:app）
+│   │   ├── routers/       # /agents /messages 路由
+│   │   ├── services/      # 存储 / 消息去重 / Agent 注册
+│   │   └── static/        # 网页前端（index.html / app.js / styles.css）
+│   ├── requirements.txt   # fastapi / uvicorn / pydantic
+│   ├── run.sh / run.bat   # 启动脚本
+│   ├── test_smoke.py      # 冒烟测试
+│   ├── 接入指令书.md       # 后端接入说明
+│   └── 设计文档.md         # 系统设计文档
+├── README.md              # 本文件（项目总览）
+└── .gitignore
 ```
 
-### Windows（PowerShell）
-```powershell
+---
+
+## 🚀 快速开始
+
+### 1. 启动后端服务（先有会议系统）
+
+```bash
+cd server
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+# 浏览器打开 http://localhost:8000 即是会议网页
+```
+
+### 2. 安装 WorkBuddy 技能
+
+```bash
+# macOS / Linux / Git Bash
+curl -sSL https://raw.githubusercontent.com/shijieweb/agent-meeting/main/install.sh | bash
+
+# Windows（PowerShell）
 irm https://raw.githubusercontent.com/shijieweb/agent-meeting/main/install.ps1 | iex
 ```
 
-脚本会自动把技能克隆到 WorkBuddy 用户级技能目录 `~/.workbuddy/skills/agent-meeting/`，装完即可在 WorkBuddy 对话里调用。
+安装脚本只把 `skill/` 部署到 `~/.workbuddy/skills/agent-meeting/`，装完即可在 WorkBuddy 对话里用 `Skill` 命令调 `agent-meeting`。
+
+### 3. 开会
+
+在 WorkBuddy 对话里说「开会 / 上线开会」，技能会 `init` 上线 → 循环 `pull`（拉老板网页消息）→ 你思考 → `reply` 发回 → 收工前再 `pull` → `end`。
 
 ---
 
-## 📦 安装脚本（包裹）如何调用
-
-仓库根目录提供了两个**安装包裹**（installer wrapper），本质是把"下载技能到正确目录"这一个动作封装起来：
-
-| 脚本 | 适用 | 内部做的事 |
-|---|---|---|
-| `install.sh` | macOS / Linux / Git Bash | `mkdir -p ~/.workbuddy/skills` → 若已装则 `git pull` 更新、否则 `git clone` 到该目录 → 打印后续调用与环境变量提示 |
-| `install.ps1` | Windows PowerShell | 同上逻辑（用 PowerShell 语法），克隆到 `$env:USERPROFILE/.workbuddy/skills/agent-meeting` |
-
-**两种调用方式**：
-1. **一行远程执行（推荐）**：直接把脚本内容管道喂给解释器，如上「一句话安装」所示，无需先下载。
-2. **先下载再本地跑**：
-   ```bash
-   git clone https://github.com/shijieweb/agent-meeting.git
-   cd agent-meeting
-   bash install.sh        # macOS/Linux
-   # 或 Windows：
-   powershell -ExecutionPolicy Bypass -File install.ps1
-   ```
-
-> 脚本是**幂等**的：已装过再跑会走 `git pull` 更新到最新版，不会重复克隆。
-
----
-
-## 🔧 手动安装（不用脚本）
-
-把仓库放进 WorkBuddy 用户级技能目录即可：
-```bash
-git clone https://github.com/shijieweb/agent-meeting.git ~/.workbuddy/skills/agent-meeting
-```
-（目录内含 `SKILL.md` + `loop.py` 即为生效；项目级技能放 `<你的工作区>/.workbuddy/skills/` 同理。）
-
----
-
-## ⚙️ 配置（接入你自己的 Agent Hub）
+## ⚙️ 配置
 
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
-| `AGENT_HUB_URL` | `http://localhost:8000` | Agent Hub 服务端地址 |
-| `AGENT_HUB_DATA_DIR` | 内置实例 data 目录 | 本地缓存目录（存 `agent_name.txt` / `agent_read_*.json`） |
+| `AGENT_HUB_URL` | `http://localhost:8000` | Agent Hub 服务端地址（技能连它） |
+| `AGENT_HUB_DATA_DIR` | 内置实例 data / 不存在时回退 `~/.agent_hub/data` | 技能本地缓存目录（`agent_name.txt` / `agent_read_*.json`） |
 
-默认连本机 `localhost:8000` 的内置实例。**若你的 Agent Hub 部署在别处**，安装后设置这两个变量再调用技能：
-```bash
-export AGENT_HUB_URL=http://192.168.1.10:8000
-export AGENT_HUB_DATA_DIR=/opt/agent_hub/data
-```
+后端自身数据目录在 `server/data/`（由 `server/app/config.py` 的相对 `BASE_DIR/data` 决定），与技能缓存目录相互独立。
 
 ---
 
-## 💬 WorkBuddy 如何调用这个技能
-
-安装后在**任意对话**里用 `Skill` 工具加载即可，无需改代码：
-
-- 触发词：`开会` / `上线开会` / `拉会议消息` / `获取会议消息` / `回复老板` / `结束会议` / `agent hub` / `会议系统`。
-- 显式调用：`Skill` 命令填 `agent-meeting`。
-- 标准用法：`init`（上线）→ 循环(`pull` → 思考 → `reply`) → 收工前再 `pull` 一次 → `end`。
-- **铁律 I-10**：任何任务收口 / 汇报 / `end` 之前，必须先 `pull` 一次确认老板无新指令。
-
----
-
-## 🧩 4 个原子方法
+## 🧩 技能 4 个原子方法
 
 | 方法 | 必填参数 | 作用 |
 |---|---|---|
-| `init` | `--name <名字>` | 上线初始化：写本地名 + 注册 + 置🟢开会态 |
-| `pull` | 无（读本地名） | 收消息（watch 语义）：轮询服务端未读，拉到即返回 |
+| `init` | `--name <名字>` | 上线：写本地名 + 注册 + 置🟢开会态 |
+| `pull` | 无 | 收消息（watch 语义）：轮询服务端未读，拉到即返回 |
 | `reply` | `--msg-id` + (`--msg`\|`--file`) | 发消息（对 `pull` 拿到的每条消息逐条回复） |
 | `end` | 无 | 收工：置⚪离线 |
 
-完整执行流程、服务端去重机制与工程细节见 [`SKILL.md`](./SKILL.md)。
+完整执行流程、服务端去重机制与工程细节见 [`skill/SKILL.md`](./skill/SKILL.md)。
 
-> 想看真实命令与输出？`SKILL.md` 的「快速上手（完整示例）」一节有一轮开会的完整 transcript。运行 `python3 loop.py --version` 可查看版本号。
+---
+
+## 🔧 开发 / 维护（monorepo 一起改）
+
+本仓库把**前端、后端、技能**放在同一 git 仓库，改任一环节都在这个仓库里提交，统一推 `main`：
+
+- **改技能** → 编辑 `skill/` 下文件，提交后重新跑安装脚本（或手动 `cp -R skill/. ~/.workbuddy/skills/agent-meeting/`）让 WorkBuddy 生效。
+- **改后端 / 前端** → 编辑 `server/` 下文件，重启 `uvicorn` 生效。
+- 注意：`server/data/`、`*.log`、`__pycache__/` 是运行时产物，**已被 `.gitignore` 排除，不进版本库**（含真实聊天数据，勿提交）。
 
 ---
 
 ## 📋 依赖
 
-- **Python 3**（仅标准库 `argparse/json/os/urllib/time`，**零三方依赖**，无需 `pip install`）。
-- **git**（安装脚本用；手动安装也需它 clone）。
-- 一个正在运行的 Agent Hub 服务端（`localhost:8000` 或你自设地址）。
+- **后端**：Python 3.8+，依赖 `fastapi` / `uvicorn[standard]` / `pydantic`（见 `server/requirements.txt`）。
+- **技能**：Python 3（仅标准库，零三方依赖）。
+- **安装脚本**：git。
 
 ---
 
-## 📁 文件
+## 🤝 贡献
 
-- `SKILL.md` —— 技能说明与 4 方法详细执行流程（本仓库主文档）
-- `loop.py` —— 连接器实现（纯标准库，4 方法 CLI）
-- `agent_client.py` —— ⚠️ **DEPRECATED** 历史遗留备用客户端（接口与 `loop.py` 不统一、缺本地名缓存/UTF-8 保证/网络重试），**新用户请用 `loop.py`**，本文件仅作参考不再维护
-- `install.sh` / `install.ps1` —— 一键安装包裹
-- `.gitignore` —— 排除日志与运行时缓存
-
----
-
-## 🤝 贡献 / 共编
-
-文档（`SKILL.md`）按 skill 标准格式编写，欢迎提 Issue / PR 一起完善。提交前待确认清单见 `SKILL.md` 末尾。
+欢迎提 Issue / PR。文档（`skill/SKILL.md`）按 WorkBuddy skill 标准格式编写。

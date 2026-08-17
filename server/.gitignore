@@ -1,0 +1,14 @@
+# 运行时数据（JSON 持久化文件，由服务自动生成）
+data/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 运行日志
+*.log
+.server.log
+.agent.log
+_doc_*.json
+_doc_*.md
+_reply_tmp.txt

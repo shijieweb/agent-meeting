@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Agent Hub</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="chat-container">
+    <header class="chat-header">
+      <h1>小伙伴会议系统</h1>
+      <span id="agent-status" class="status-dot"></span>
+    </header>
+    <div id="reawaken-hint" class="reawaken-hint" style="display:none">⚠️ 阿编已掉线（会话中大脑失联）—— 在对话里说「开会」重新唤醒</div>
+    <main id="message-list" class="message-list"></main>
+    <footer class="input-area">
+      <select id="agent-select" class="agent-select">
+        <option value="all">@所有人</option>
+      </select>
+      <input type="text" id="message-input" class="message-input" placeholder="输入消息..." autocomplete="off">
+      <button id="send-btn" class="send-btn">发送</button>
+    </footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
