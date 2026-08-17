@@ -5,6 +5,7 @@ let clientNewestId = null;     // 当前已渲染的最新消息 id（展示用�
 let clientOldestId = null;     // 当前已渲染的最旧消息 id（before 游标基准）
 let pollCursorId = null;       // 轮询游标：只由「服务端返回的消息」推进，乐观发送不推进（BUG-C 修复）
 let insertedIds = new Set();   // 已插入消息 id 集合，去重幂等（AC-2.3）
+let readStatusNodes = new Map(); // 消息 id -> 已读徽标 DOM 节点（仅 user 消息），用于增量刷新时原地重画 read 状态
 let loadingOlder = false;      // 触顶加载守卫，防并发重入
 let noMoreOlder = false;       // 已到最早历史，停止发起 before_id 请求（风险-B 修复）
 let isAtBottom = true;         // 用户是否位于列表最底层
@@ -44,6 +45,7 @@ async function init() {
   await loadAgentStatus();
   setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
   setInterval(loadAgentStatus, 3000); // 每3秒刷新阿编在线状态（pull 即心跳）
+  setInterval(refreshReadReceipts, 5000); // 每5秒同步已读回执，刷新已渲染消息的 ✓/○ 徽标
   const list = document.getElementById('message-list');
   if (list) {
     list.addEventListener('scroll', onListScroll);
@@ -110,6 +112,7 @@ async function loadInitialPage() {
     const list = document.getElementById('message-list');
     list.innerHTML = '';        // 仅首屏一次性清空（非轮询/追加），其后不再整体重绘
     insertedIds.clear();
+    readStatusNodes.clear();
     clientNewestId = null;
     clientOldestId = null;
     pollCursorId = null;
@@ -139,9 +142,10 @@ async function pollNew() {
     let lastServerId = null;
     msgs.forEach(msg => {
       lastServerId = msg.id;
-      if (insertedIds.has(msg.id)) return; // 去重幂等
+      const wasInserted = insertedIds.has(msg.id);
+      // appendMessage 内部：已存在则原地刷新已读徽标（read_by 可能已变），不存在则新建
       appendMessage(msg);
-      newCount++;
+      if (!wasInserted) newCount++;
     });
     // 轮询游标只由服务端返回的消息推进，乐观发送不推进（BUG-C 修复：不丢更早的 agent 回复）
     if (lastServerId !== null) pollCursorId = lastServerId;
@@ -150,6 +154,18 @@ async function pollNew() {
       showNewMessageBanner(newCount);
     }
   } catch (e) { /* 轮询失败不阻断 */ }
+}
+
+// 根据消息的 read_by 重新计算并写入「已读徽标」文本（single: ✓已读/○未读；all: N/N 已读/✓✓ 全部已读）
+function paintReadStatus(msg, statusEl) {
+  if (msg.target_type === 'single') {
+    const isRead = msg.read_by && msg.read_by.includes(msg.target_agent_name);
+    statusEl.innerHTML = isRead ? '<span>✓</span> 已读' : '<span>○</span> 未读';
+  } else if (msg.target_type === 'all') {
+    const total = currentAgentList.length;
+    const readCount = msg.read_by ? msg.read_by.length : 0;
+    statusEl.innerHTML = (readCount === total && total > 0) ? '✓✓ 全部已读' : `${readCount}/${total} 已读`;
+  }
 }
 
 // 单条消息渲染节点（bubble + 可选 read-status），沿用原 renderMessages 的分支逻辑
@@ -167,23 +183,26 @@ function buildMessageNodes(msg) {
   if (msg.sender_type === 'user') {
     const status = document.createElement('div');
     status.classList.add('read-status');
-    if (msg.target_type === 'single') {
-      const isRead = msg.read_by && msg.read_by.includes(msg.target_agent_name);
-      status.innerHTML = isRead ? '<span>✓</span> 已读' : '<span>○</span> 未读';
-    } else if (msg.target_type === 'all') {
-      const total = currentAgentList.length;
-      const readCount = msg.read_by ? msg.read_by.length : 0;
-      status.innerHTML = (readCount === total && total > 0) ? '✓✓ 全部已读' : `${readCount}/${total} 已读`;
-    }
+    paintReadStatus(msg, status);
+    status._readSig = (msg.read_by || []).join(','); // 记录上次 read_by 签名，供增量刷新时跳过无变化项
+    readStatusNodes.set(msg.id, status);             // 登记节点，供后续原地刷新 read 状态
     nodes.push(status);
   }
   return nodes;
 }
 
-// 追加到列表底部；去重、初始化 oldest、更新 newest 游标；仅底部时滚底（AC-1.2/2.2/3.4）
+// 追加到列表底部；去重时原地刷新已读徽标（read_by 可能已变），不重建气泡、不 innerHTML 清空
 function appendMessage(msg) {
-  if (insertedIds.has(msg.id)) return;
   const list = document.getElementById('message-list');
+  if (insertedIds.has(msg.id)) {
+    // 已渲染：只根据最新 read_by 重画已读徽标（修复「已读状态不随数据同步刷新」）
+    const st = readStatusNodes.get(msg.id);
+    if (st) {
+      st._readSig = (msg.read_by || []).join(',');
+      paintReadStatus(msg, st);
+    }
+    return;
+  }
   buildMessageNodes(msg).forEach(n => list.appendChild(n));
   insertedIds.add(msg.id);
   if (clientOldestId === null) clientOldestId = msg.id; // BUG-A 修复：首屏/任意路径都初始化 oldest
@@ -191,10 +210,17 @@ function appendMessage(msg) {
   if (isAtBottom) scrollToBottom();
 }
 
-// 前置插入到列表顶部；去重、更新 oldest 游标（AC-4.1）
+// 前置插入到列表顶部；去重时原地刷新已读徽标；更新 oldest 游标（AC-4.1）
 function prependMessage(msg) {
-  if (insertedIds.has(msg.id)) return;
   const list = document.getElementById('message-list');
+  if (insertedIds.has(msg.id)) {
+    const st = readStatusNodes.get(msg.id);
+    if (st) {
+      st._readSig = (msg.read_by || []).join(',');
+      paintReadStatus(msg, st);
+    }
+    return;
+  }
   const frag = document.createDocumentFragment();
   buildMessageNodes(msg).forEach(n => frag.appendChild(n));
   list.insertBefore(frag, list.firstChild);
@@ -225,6 +251,24 @@ async function loadOlder() {
   finally {
     loadingOlder = false;
   }
+}
+
+// 周期性已读回执同步：拉取最新 read_by 并原地刷新已渲染消息的徽标。
+// 仅更新已登记节点、跳过无变化项，绝不重建气泡或 innerHTML 清空，保留增量加载（AC-1.2）。
+async function refreshReadReceipts() {
+  try {
+    const res = await fetch('/api/messages/history?limit=10000');
+    const data = await res.json();
+    (data.messages || []).forEach(msg => {
+      if (!insertedIds.has(msg.id)) return;        // 只处理已渲染的消息
+      const st = readStatusNodes.get(msg.id);
+      if (!st) return;                              // 仅 user 消息有已读徽标
+      const sig = (msg.read_by || []).join(',');
+      if (st._readSig === sig) return;              // 无变化则跳过，避免无效 DOM 写
+      st._readSig = sig;
+      paintReadStatus(msg, st);
+    });
+  } catch (e) { /* 失败不阻断 */ }
 }
 
 function onListScroll() {
