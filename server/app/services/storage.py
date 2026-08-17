@@ -110,6 +110,22 @@ def save_agent_read_set(agent_name: str, read_set) -> None:
     write_json(agent_read_set_file(agent_name), sorted(set(read_set)))
 
 
+def delete_agent_read_set(agent_name: str) -> bool:
+    """删除某 agent 的已读集合文件（幽灵清理/手动 prune 时调用）。
+
+    持 `_lock` 执行 os.remove；文件不存在返回 False（幂等，容忍并发/在途重建）。
+    """
+    with _lock:
+        p = _path(agent_read_set_file(agent_name))
+        try:
+            if os.path.isfile(p):
+                os.remove(p)
+                return True
+        except OSError:
+            pass
+        return False
+
+
 def mark_agent_read(agent_name: str, message_ids) -> None:
     """在锁内把若干消息 id 加入该 agent 的已读集合（read-modify-write 原子）。
 

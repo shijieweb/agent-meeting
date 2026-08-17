@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Agent Hub 实弹冒烟测试：覆盖方案书关键链路 + 已读回执 + 幂等 + @all。"""
+"""Agent Hub 实弹冒烟测试：覆盖方案书关键链路 + 已读回执 + 幂等 + @all + presence。
+
+BASE 可用环境变量 SMOKE_BASE 覆盖（默认 http://localhost:8000）：
+自测请指向隔离实例（如 SMOKE_BASE=http://127.0.0.1:8011），严禁打到生产 8000。
+"""
 import json
+import os
 import urllib.request
 import urllib.error
 
-BASE = "http://localhost:8000"
+BASE = os.environ.get("SMOKE_BASE", "http://localhost:8000")
 PASS, FAIL = 0, 0
 
 
@@ -98,5 +103,20 @@ check("T-REPLY-04 未注册 Agent 回复返回400", s == 400, str(s))
 req("POST", "/api/agents/register", {"name": "EdgeProbe"})
 s, d = req("POST", "/api/agents/register", {"name": "EdgeProbe"})
 check("T-REG-02 重注册提示已存在", s == 200 and d.get("already_exists") is True, str(d))
+
+print("== 8. presence 字段 + 在线列表语义（在线/离线自动化）==")
+s, d = req("GET", "/api/agents/status")
+check("status 返回 presence 字段", s == 200 and all("presence" in a for a in d["agents"]), str(d["agents"][:2]))
+s, d = req("POST", "/api/agents/register", {"name": "EdgePresence"})
+check("register EdgePresence", s == 200 and d.get("status") == "ok", str(d))
+s, d = req("GET", "/api/agents/status")
+ep = [a for a in d["agents"] if a["name"] == "EdgePresence"]
+check("新注册 agent presence=online", len(ep) == 1 and ep[0]["presence"] == "online", str(ep))
+s, d = req("POST", "/api/agents/register", {"name": "EdgePresence"})
+check("在线同名重注册 reactivated=false", s == 200 and d.get("already_exists") is True and d.get("reactivated") is False, str(d))
+s, d = req("GET", "/api/agents")
+check("/api/agents 默认列表含在线 EdgePresence", "EdgePresence" in d["agents"], str(d["agents"]))
+s, d = req("GET", "/api/agents?all=true")
+check("/api/agents?all=true 含 EdgePresence", "EdgePresence" in d["agents"], str(d["agents"]))
 
 print(f"\n结果：PASS={PASS}  FAIL={FAIL}")

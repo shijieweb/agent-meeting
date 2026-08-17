@@ -71,6 +71,7 @@ async function init() {
   await loadAgents();
   await loadInitialPage();      // 首屏只取一页（?limit=30），取代全量 loadHistory
   await loadAgentStatus();
+  setInterval(loadAgentStatus, 3000); // presence：状态栏 ≤5s 刷新（拍板 + PRD §2.5）
   setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
   setInterval(refreshReadReceipts, 5000); // 每5秒同步已读回执，刷新已渲染消息的 ✓/○ 徽标
   setInterval(loadAgents, 30000); // F6：每30秒刷新 agent 下拉，新注册 agent 自动出现、保留当前选中值
@@ -86,57 +87,37 @@ async function init() {
   }
 }
 
+// presence（服务端权威三态 online/lost/offline）：统一在线判定。
+// 优先用 /api/agents/status 返回的 presence 字段；fallback（旧缓存 JS / 兼容）按 last_seen ≤1200s。
+function isOnline(a) {
+  if (a.presence !== undefined) return a.presence === 'online';
+  if (!a.last_seen) return false;
+  return a.status !== 'offline' &&
+         (Date.now() - new Date(a.last_seen).getTime()) / 1000 <= 1200;
+}
+
 async function loadAgentStatus() {
   const container = document.getElementById('agent-status');
   if (!container) return;   // 容器不存在时直接跳过，不发无效请求
   try {
     const res = await fetch(API_BASE + 'api/agents/status');
     const data = await res.json();
-    // F1：去掉写死单一名字的 find 过滤；复用 #agent-status 为状态点容器，遍历全部 agent 动态渲染。
+    // 状态栏只显示在线 agent（presence 服务端权威判定）；offline/lost 一律不渲染（老板拍板 §5.1-3）。
     container.innerHTML = '';
     (data.agents || []).forEach(a => {
+      if (!isOnline(a)) return;   // 离线/失联不显示
       const name = a.name || '';
-      // A'（老板 22:55 纠正）：状态栏只显示「在线/处理中/待命」的 agent；
-      // 已收工（offline）、心跳超时且无会话（离线）、无 last_seen 且非活跃 一律不显示（22:04 收工态不显示）。
-      const active = a.status === 'working' || a.status === 'waiting' || a.has_unread === true;
-      if (a.status === 'offline') return;        // 已收工不显示（即使有未读）
-      if (!a.last_seen && !active) return;       // 无心跳且非活跃 → 不显示
       const dot = document.createElement('span');
       dot.className = 'status-dot';
-      if (!a.last_seen) {
-        // 无 last_seen 但活跃（working/waiting/has_unread）→ 按活跃态显示，不落 idle
-        if (a.status === 'working') {
-          dot.classList.add('working');
-          dot.textContent = name + '·处理中';
-        } else {
-          dot.classList.add('waiting');
-          dot.textContent = a.has_unread ? name + '·处理任务' : name + '·待命中';
-        }
+      if (a.status === 'working') {
+        dot.classList.add('working');
+        dot.textContent = name + '·处理中';
+      } else if (a.has_unread) {
+        dot.classList.add('waiting');
+        dot.textContent = name + '·处理任务';
       } else {
-        const ageSec = (Date.now() - new Date(a.last_seen).getTime()) / 1000;
-        if (a.status === 'offline') {
-          return;  // 已收工不显示（双保险）
-        }
-        const aliveWindow = a.session ? 600 : 120;
-        if (ageSec > aliveWindow) {
-          // 19:44 修复：会话中 agent 一律"处理中"，不再判掉线/需重唤
-          if (a.session) {
-            dot.classList.add('working');
-            dot.textContent = name + '·处理中';
-          } else {
-            return;  // 心跳超时且无会话 → 视为离线，不显示
-          }
-        } else if (a.status === 'working') {
-          dot.classList.add('working');
-          dot.textContent = name + '·处理中';
-        } else if (a.has_unread) {
-          // EXT-1：有未读但非 working —— 显示「处理任务」，区别于真待命
-          dot.classList.add('waiting');
-          dot.textContent = name + '·处理任务';
-        } else {
-          dot.classList.add('waiting');
-          dot.textContent = name + '·待命中';
-        }
+        dot.classList.add('waiting');
+        dot.textContent = name + '·待命中';
       }
       container.appendChild(dot);
     });
@@ -172,7 +153,7 @@ async function loadAgents() {
       const currentOnline = {};
       agentsArr.forEach(a => {
         const name = a.name || '';
-        currentOnline[name] = a.status === 'working' || a.status === 'waiting' || a.session === true;
+        currentOnline[name] = isOnline(a);   // presence：统一在线判定（服务端权威 / last_seen fallback）
       });
       if (prevAgentStates === null) {
         // 首帧快照：不弹「已在线」通知（避免刷新即对在线 agent 发「加入」）

@@ -9,11 +9,12 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 @router.get("/status")
 def agents_status():
-    """返回各 Agent 的 {name, last_seen, status, session, has_unread}。
+    """返回各 Agent 的 {name, last_seen, status, session, presence, has_unread}。
 
-    EXT-1：附加上 has_unread（复用 message_store.agent_has_unread），
-    让前端能区分「待命中但有未读任务」与「真待命」，避免有未读却显示「待命」。
+    presence：online/lost/offline 派生字段（服务端权威判定，不落盘）。
+    先惰性清扫（60s 节流）再读最新状态——失联自动下线、超保留期自动删除。
     """
+    agent_store.scan_and_sweep()            # ① 惰性清扫先于读（节流 60s，成本≈0）
     statuses = agent_store.get_agent_statuses()
     for a in statuses:
         a["has_unread"] = message_store.agent_has_unread(a.get("name", ""))
@@ -37,22 +38,32 @@ def set_session_endpoint(name: str, active: bool = False):
 
 @router.post("/register")
 def register(body: AgentRegister):
-    # T-REG-02 / T-PERM-01：区分新注册与已存在，重注册提示唯一性
-    agents, created = agent_store.register_agent(body.name)
+    # T-REG-02 / T-PERM-01：区分新注册与已存在，重注册提示唯一性；
+    # 名字规范化：strip 后空名 422（Pydantic min_length 只拦纯空串，拦不住 "   "）。
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="agent name must not be blank")
+    agents, created, info = agent_store.register_agent(name)
     if created:
         return {"status": "ok", "message": "Agent registered successfully"}
-    return {"status": "ok", "message": "Agent already registered", "already_exists": True}
+    # 唤醒语义（老板拍板 §5.1-4）：失联/离线同名重注册返回 reactivated=true
+    return {
+        "status": "ok",
+        "message": "Agent already registered",
+        "already_exists": True,
+        "reactivated": info.get("reactivated", False),
+    }
 
 
 @router.get("")
 def list_agents(all: bool = False):
-    """默认只返回活跃 agent（僵尸占位已过滤，不污染已读统计）；?all=true 返回全部（管理/调试用）。"""
+    """默认只返回在线 agent（presence==online，离线/失联不污染已读统计与下拉）；?all=true 返回全部（管理/调试用）。"""
     names = agent_store.list_agent_names() if all else agent_store.list_active_agent_names()
     return {"agents": names}
 
 
 @router.post("/prune")
 def prune_agents():
-    """手动清理僵尸占位 agent（测试残留等）。"""
+    """手动清理僵尸占位 agent（管理兜底；删除判定=占位>1h / 离线>6h20min，并清理已读集合孤儿文件）。"""
     removed = agent_store.prune_zombie_agents()
     return {"status": "ok", "removed": removed}

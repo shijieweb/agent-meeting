@@ -15,3 +15,12 @@ POLL_INTERVAL = 3
 # 同时作为 reply 接口的业务上限（>4000 返回 400），避免超大内容撑爆 messages.json。
 # 注意：绝不使用旧 100 字阈值做简单拒长回复（F11 红线）。
 REPLY_MAX_LEN = 4000
+
+# ---- 在线/离线状态自动化（presence 管理）----
+ONLINE_WINDOW = 1200                 # 在线窗口（秒），统一=失联阈值，消除 600/120 双窗口闪烁
+LOST_TIMEOUT = 1200                  # 失联阈值：>20min 无任何正常请求 = 失联（老板拍板 §5.1-1）
+LOST_GRACE_BEFORE_DELETE = 6 * 3600  # 失联/离线保留期：6h（老板拍板 §5.1-2）
+# 惰性清扫节流：60s 内最多真正扫描一次（老板拍板 §5.1-5）。
+# 支持环境变量覆盖（默认 60）：隔离集成测试设 0 让每次 status 都真正清扫；生产不设置。
+SWEEP_INTERVAL = int(os.environ.get("SWEEP_INTERVAL", "60"))
+# 删除时点 = last_seen 距今 > LOST_TIMEOUT + LOST_GRACE_BEFORE_DELETE（= 6h20min）
