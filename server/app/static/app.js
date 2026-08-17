@@ -79,13 +79,9 @@ async function loadAgentStatus() {
     const res = await fetch('/api/agents/status');
     const data = await res.json();
     const container = document.getElementById('agent-status');
-    const hint = document.getElementById('reawaken-hint');
-    const lostNameEl = document.getElementById('lost-agent-name');
     if (!container) return;
     // F1：去掉写死单一名字的 find 过滤；复用 #agent-status 为状态点容器，遍历全部 agent 动态渲染。
     container.innerHTML = '';
-    let anyLost = false;
-    let lostAgentName = '';   // D-2：记录掉线 agent 的真实名，回填到提示语
     (data.agents || []).forEach(a => {
       const name = a.name || '';
       const dot = document.createElement('span');
@@ -101,11 +97,10 @@ async function loadAgentStatus() {
         } else {
           const aliveWindow = a.session ? 600 : 120;
           if (ageSec > aliveWindow) {
+            // 19:44 修复：会话中 agent 一律"处理中"，不再判掉线/需重唤
             if (a.session) {
-              dot.classList.add('lost');
-              dot.textContent = name + '·已掉线·需重唤';
-              anyLost = true;
-              lostAgentName = name;
+              dot.classList.add('working');
+              dot.textContent = name + '·处理中';
             } else {
               dot.classList.add('idle');
               dot.textContent = name + '·离线';
@@ -125,9 +120,6 @@ async function loadAgentStatus() {
       }
       container.appendChild(dot);
     });
-    if (hint) hint.style.display = anyLost ? 'block' : 'none';
-    // D-2：把真实掉线 agent 名回填提示语；无具体名时兜底 "AI"
-    if (lostNameEl) lostNameEl.textContent = lostAgentName || 'AI';
   } catch (e) { /* 状态接口异常不阻断聊天 */ }
 }
 
@@ -214,19 +206,41 @@ function paintReadStatus(msg, statusEl) {
   }
 }
 
-// 单条消息渲染节点（bubble + 可选 read-status），沿用原 renderMessages 的分支逻辑
+// 单条消息渲染节点：头像 + 内容列（名字 + 气泡）行布局（Telegram 风换皮）。
+// 返回 [row, status?]，与旧 [bubble, status?] 结构一致，appendMessage/prependMessage 无需改。
 function buildMessageNodes(msg) {
+  const isUser = msg.sender_type === 'user';
+  const row = document.createElement('div');
+  row.className = 'msg-row ' + (isUser ? 'msg-out' : 'msg-in');
+
+  // 头像：agent 内联 bot SVG（品牌蓝底），user 文字"我"（灰底）
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  if (isUser) {
+    avatar.textContent = '我';
+  } else {
+    avatar.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
+  }
+
+  // 内容列：名字 + 气泡
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+
   const bubble = document.createElement('div');
-  bubble.classList.add('message-bubble');
-  if (msg.sender_type === 'user') {
+  bubble.classList.add('msg-bubble');
+  if (isUser) {
     bubble.classList.add('user');
     bubble.textContent = msg.content;
   } else {
     bubble.classList.add('agent');
     bubble.innerHTML = '<div class="agent-name">' + escapeHtml(msg.sender_agent_name) + ':</div>' + renderMarkdown(msg.content);
   }
-  const nodes = [bubble];
-  if (msg.sender_type === 'user') {
+  content.appendChild(bubble);
+  row.appendChild(avatar);
+  row.appendChild(content);
+
+  const nodes = [row];
+  if (isUser) {
     const status = document.createElement('div');
     status.classList.add('read-status');
     paintReadStatus(msg, status);
@@ -350,36 +364,26 @@ function autoGrowInput() {
   el.style.overflowY = el.scrollHeight > MAX_INPUT_H ? 'auto' : 'hidden';
 }
 
-// ---- EXT-2：移动端输入法遮挡处理 ----
-// 聚焦时把输入框滚入可视区域中部；监听 visualViewport 伸缩，用 env(keyboard-inset-height)
-// 或 visualViewport 差值计算键盘高度，给输入区加底部 padding 把输入框顶进视口。
+// ---- EXT-2（IME 修复）：聚焦把消息列表滚到底，让最新消息与输入框可见 ----
+// 消息列表是内部滚动容器 #message-list（非整页滚动）；视口随键盘收缩时
+// .input-area 因 sticky 底 + flex 列始终可见，无需再手动加 padding。
 function setupKeyboardHandling() {
-  const inputArea = document.querySelector('.input-area');
   const input = document.getElementById('message-input');
-  if (!inputArea || !input) return;
-
-  // 聚焦延时滚动，等输入法弹起后再定位
-  input.addEventListener('focus', () => {
-    setTimeout(() => {
-      input.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, 300);
+  const list = document.getElementById('message-list');
+  if (!input || !list) return;
+  input.addEventListener('focus', function () {
+    setTimeout(function () {
+      list.scrollTop = list.scrollHeight;                       // 最新消息滚入视口
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); // 与参考 HTML 对齐（整页滚动布局下生效，本布局为 no-op 但不影响）
+    }, 350);
   });
-
-  if (window.visualViewport) {
-    const vv = window.visualViewport;
-    const onVvChange = () => {
-      const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      // 优先 env(keyboard-inset-height) 兜底，否则用 visualViewport 差值
-      const envInset = getComputedStyle(document.documentElement)
-        .getPropertyValue('keyboard-inset-height');
-      const inset = envInset ? parseFloat(envInset) : keyboardHeight;
-      inputArea.style.paddingBottom = (inset > 0 ? inset : 0) + 'px';
-      if (inset > 0) input.scrollIntoView({ block: 'center' });
-    };
-    vv.addEventListener('resize', onVvChange);
-    vv.addEventListener('scroll', onVvChange);
-    window.addEventListener('blur', () => { inputArea.style.paddingBottom = '0px'; });
-  }
+  input.addEventListener('blur', function () {
+    setTimeout(function () {
+      if (window.innerHeight < window.outerHeight - 50) {       // 键盘曾弹起
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 100);
+  });
 }
 
 // ---- 微信式浮动提示组件（AC-3.1 / 3.2 / 3.3 / 3.4）----
@@ -460,8 +464,12 @@ async function sendMessage() {
 }
 
 document.getElementById('send-btn').addEventListener('click', sendMessage);
-document.getElementById('message-input').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendMessage();
+document.getElementById('message-input').addEventListener('keydown', (e) => {
+  // textarea：回车发送，Shift+回车换行
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 });
 
 init();
