@@ -30,5 +30,14 @@ def register(body: AgentRegister):
 
 
 @router.get("")
-def list_agents():
-    return {"agents": agent_store.list_agent_names()}
+def list_agents(all: bool = False):
+    """默认只返回活跃 agent（僵尸占位已过滤，不污染已读统计）；?all=true 返回全部（管理/调试用）。"""
+    names = agent_store.list_agent_names() if all else agent_store.list_active_agent_names()
+    return {"agents": names}
+
+
+@router.post("/prune")
+def prune_agents():
+    """手动清理僵尸占位 agent（测试残留等）。"""
+    removed = agent_store.prune_zombie_agents()
+    return {"status": "ok", "removed": removed}

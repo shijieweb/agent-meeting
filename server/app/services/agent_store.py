@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Agent 注册与查询逻辑。对应方案书 §5.3 register_agent / load_agents。"""
+import time
 from .storage import read_json, write_json, now_iso
 
 AGENTS_FILE = "agents.json"
@@ -24,12 +25,50 @@ def register_agent(name):
         return agents, False
     agents.append({"name": name, "registered_at": now_iso(), "last_seen": now_iso(), "status": "waiting", "session": False})
     save_agents(agents)
+    prune_zombie_agents()  # 注册时顺手清掉历史僵尸占位，防测试残留无限累积
     return agents, True
 
 
 def agent_exists(name):
     """目标/回复 Agent 是否存在（用于发送/回复前的存在性校验）。"""
     return any(a.get("name") == name for a in load_agents())
+
+
+INACTIVE_DAYS = 7
+
+
+def _is_zombie(a):
+    """僵尸占位 = 从未真正活动（last_seen==registered_at，注册后无任何 pull/心跳）或长期离线（无 session 且超阈值）。"""
+    if a.get("session"):
+        return False
+    reg = a.get("registered_at")
+    seen = a.get("last_seen")
+    if seen == reg:          # 注册后从未被 record_pull 刷新过 last_seen → 纯占位
+        return True
+    try:
+        now = time.time()
+        seen_ts = time.mktime(time.strptime(seen, "%Y-%m-%dT%H:%M:%S"))
+        if now - seen_ts > INACTIVE_DAYS * 86400:
+            return True
+    except (ValueError, TypeError):
+        pass
+    return False
+
+
+def prune_zombie_agents(inactive_days=INACTIVE_DAYS):
+    """删除僵尸占位 agent（测试残留等），返回删除数量。注册新 agent 时自动调用，防止无限累积污染已读统计。"""
+    agents = load_agents()
+    before = len(agents)
+    kept = [a for a in agents if not _is_zombie(a)]
+    removed = before - len(kept)
+    if removed:
+        save_agents(kept)
+    return removed
+
+
+def list_active_agent_names():
+    """只返回活跃（非僵尸）agent 名，供 /api/agents 默认使用，避免僵尸占位进入已读统计。"""
+    return [a.get("name") for a in load_agents() if a.get("name") and not _is_zombie(a)]
 
 
 def list_agent_names():
