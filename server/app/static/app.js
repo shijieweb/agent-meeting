@@ -1,5 +1,4 @@
 let currentAgentList = [];
-let prevAgentStates = null;     // F1：上一次 agent 在线态快照（name -> true/false），用于 join/leave 提示
 
 // ---- 相对路径 base（B 修复）：兼容反代剥离前缀 ----
 // '/meeting' → '/meeting/'；'/meeting/' → '/meeting/'；'/' → '/'
@@ -18,6 +17,8 @@ let clientNewestId = null;     // 当前已渲染的最新消息 id（展示用�
 let clientOldestId = null;     // 当前已渲染的最旧消息 id（before 游标基准）
 let pollCursorId = null;       // 轮询游标：只由「服务端返回的消息」推进，乐观发送不推进（BUG-C 修复）
 let insertedIds = new Set();   // 已插入消息 id 集合，去重幂等（AC-2.3）
+let pendingMap = new Map();    // 乐观消息状态：tempId -> {content,targetType,targetAgentName,clientMsgId,sendStatus:'sending'|'sent'|'failed'}（AC-2.3）
+let tempToServerId = new Map(); // tempId -> serverId（乐观消息升级记录，供幂等/调试）
 let readStatusNodes = new Map(); // 消息 id -> 已读徽标 DOM 节点（仅 user 消息），用于增量刷新时原地重画 read 状态
 let loadingOlder = false;      // 触顶加载守卫，防并发重入
 let noMoreOlder = false;       // 已到最早历史，停止发起 before_id 请求（风险-B 修复）
@@ -38,6 +39,21 @@ function genClientMsgId() {
     });
   }
   return 'usr_' + uuid;
+}
+
+// 乐观渲染本地临时 id（temp_<uuid>）：服务端 message_id 尚未返回前用于占位，成功后升级替换（AC-1.1/1.2）。
+function genTempId() {
+  let uuid;
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    uuid = crypto.randomUUID();
+  } else {
+    uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  return 'temp_' + uuid;
 }
 
 function escapeHtml(s) {
@@ -143,33 +159,8 @@ async function loadAgents() {
     if (prev && Array.from(select.options).some(o => o.value === prev)) {
       select.value = prev;
     }
-
-    // F1：前端 diff agent 在线/离线状态，在 30s 轮询中发出「X 加入了群组 / 离开了群组」提示。
-    // 注：/api/agents 仅返回名字数组，状态(session/status)需另取自 /api/agents/status。
-    try {
-      const sres = await fetch(API_BASE + 'api/agents/status');
-      const sdata = await sres.json();
-      const agentsArr = sdata.agents || [];
-      const currentOnline = {};
-      agentsArr.forEach(a => {
-        const name = a.name || '';
-        currentOnline[name] = isOnline(a);   // presence：统一在线判定（服务端权威 / last_seen fallback）
-      });
-      if (prevAgentStates === null) {
-        // 首帧快照：不弹「已在线」通知（避免刷新即对在线 agent 发「加入」）
-        prevAgentStates = currentOnline;
-      } else {
-        // 取并集，覆盖「曾经在线但本次状态列表未返回（视为离线）」的边界情况
-        const names = new Set([...Object.keys(prevAgentStates), ...Object.keys(currentOnline)]);
-        names.forEach(name => {
-          const wasOnline = prevAgentStates[name] === true;
-          const nowOnline = currentOnline[name] === true;
-          if (nowOnline && !wasOnline) insertSystemNotice(name + ' 加入了群组');
-          else if (!nowOnline && wasOnline) insertSystemNotice(name + ' 离开了群组');
-        });
-        prevAgentStates = currentOnline;
-      }
-    } catch (e) { /* 状态接口异常不阻断下拉刷新 */ }
+    // 注：上下线提示由持久化系统消息（sender_type=system）承担（Q2=A），
+    // 前端不再做 diff 临时 DOM 提示（app.js 旧版「X 加入了/离开了群组」已移除）。
   } catch (e) {
     // 旧的缓存 JS 可能读到新 DOM（无 #agent-select）或 /api/agents 异常。
     // 下拉框失败不阻断首屏消息列表渲染，避免产生白屏。
@@ -185,6 +176,8 @@ async function loadInitialPage() {
     list.innerHTML = '';        // 仅首屏一次性清空（非轮询/追加），其后不再整体重绘
     insertedIds.clear();
     readStatusNodes.clear();
+    pendingMap.clear();         // 页面初始化：乐观发送状态重置（新页面无在途消息）
+    tempToServerId.clear();
     clientNewestId = null;
     clientOldestId = null;
     pollCursorId = null;
@@ -214,6 +207,12 @@ async function pollNew() {
     let lastServerId = null;
     msgs.forEach(msg => {
       lastServerId = msg.id;
+      // 系统消息（presence_event）：正常 appendMessage（参与 insertedIds 去重、参与 lastServerId 推进，
+      // since_id 语义下推进到响应最后一个 id 安全），但不计入 newCount（AC-4.2 不弹「N 条新消息」）。
+      if (msg.sender_type === 'system') {
+        appendMessage(msg);
+        return;
+      }
       const wasInserted = insertedIds.has(msg.id);
       // appendMessage 内部：已存在则原地刷新已读徽标（read_by 可能已变），不存在则新建
       appendMessage(msg);
@@ -243,9 +242,18 @@ function paintReadStatus(msg, statusEl) {
 // 单条消息渲染节点：头像 + 内容列（名字 + 气泡）行布局（Telegram 风换皮）。
 // 返回 [row, status?]，与旧 [bubble, status?] 结构一致，appendMessage/prependMessage 无需改。
 function buildMessageNodes(msg) {
+  // 系统消息（presence_event）：灰色居中提示（.sys-notice，复用现有样式），不走 msg-row 布局（AC-3.4/4.1/4.2）
+  if (msg.sender_type === 'system') {
+    const notice = document.createElement('div');
+    notice.className = 'sys-notice';
+    notice.textContent = msg.content || '';
+    notice.dataset.id = msg.id;
+    return [notice];
+  }
   const isUser = msg.sender_type === 'user';
   const row = document.createElement('div');
   row.className = 'msg-row ' + (isUser ? 'msg-out' : 'msg-in');
+  row.dataset.id = msg.id;   // 供乐观升级/删除定位 DOM（AC-1.2/2.3）
 
   // 头像：agent 内联 bot SVG（品牌蓝底），user 文字"我"（灰底）
   const avatar = document.createElement('div');
@@ -282,12 +290,58 @@ function buildMessageNodes(msg) {
   if (isUser) {
     const status = document.createElement('div');
     status.classList.add('read-status');
-    paintReadStatus(msg, status);
+    const pend = pendingMap.get(msg.id);
+    if (pend) {
+      // 乐观消息（未落盘确认）：渲染 发送中/失败态（失败含重试/删除按钮），不画已读徽标（AC-1.1/2.3）
+      renderPendingStatus(status, msg.id, pend);
+    } else {
+      paintReadStatus(msg, status);
+    }
     status._readSig = (msg.read_by || []).join(','); // 记录上次 read_by 签名，供增量刷新时跳过无变化项
     readStatusNodes.set(msg.id, status);             // 登记节点，供后续原地刷新 read 状态
     nodes.push(status);
   }
   return nodes;
+}
+
+// 渲染乐观消息的状态区：sending → 「发送中…」；failed → 「⚠ 发送失败」+ 重试/删除按钮（AC-2.3）。
+function renderPendingStatus(statusEl, tempId, pend) {
+  statusEl.classList.remove('msg-failed');
+  statusEl.innerHTML = '';
+  if (pend.sendStatus === 'failed') {
+    statusEl.classList.add('msg-failed');
+    const tip = document.createElement('span');
+    tip.className = 'msg-failed-tip';
+    tip.textContent = '⚠ 发送失败';
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'msg-failed-btn';
+    retryBtn.textContent = '重试';
+    retryBtn.addEventListener('click', function () { retryMessage(tempId); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'msg-failed-btn';
+    delBtn.textContent = '删除';
+    delBtn.addEventListener('click', function () { removeMessage(tempId); });
+    statusEl.appendChild(tip);
+    statusEl.appendChild(retryBtn);
+    statusEl.appendChild(delBtn);
+  } else {
+    statusEl.textContent = '发送中…';
+  }
+}
+
+// 原地重画某条乐观消息的状态区（发送中 ↔ 失败态切换）。
+function repaintPendingStatus(tempId) {
+  const st = readStatusNodes.get(tempId);
+  const pend = pendingMap.get(tempId);
+  if (!st || !pend) return;
+  renderPendingStatus(st, tempId, pend);
+}
+
+// 按 data-id 定位消息行 DOM（id 为 temp_<uuid> / msg_<hex>，仅含安全字符）。
+function findRowById(id) {
+  const list = document.getElementById('message-list');
+  if (!list) return null;
+  return list.querySelector('[data-id="' + id + '"]');
 }
 
 // 追加到列表底部；去重时原地刷新已读徽标（read_by 可能已变），不重建气泡、不 innerHTML 清空
@@ -386,17 +440,6 @@ function scrollToBottom() {
   list.scrollTop = list.scrollHeight - list.clientHeight;
 }
 
-// F1：在消息列表中央插入一条系统提示（X 加入了群组 / 离开了群组），非消息气泡、不入 msg-row。
-function insertSystemNotice(text) {
-  const list = document.getElementById('message-list');
-  if (!list) return;
-  const div = document.createElement('div');
-  div.className = 'sys-notice';
-  div.textContent = text;
-  list.appendChild(div);
-  scrollToBottom();
-}
-
 function isNearBottom() {
   const list = document.getElementById('message-list');
   return list.scrollTop + list.clientHeight >= list.scrollHeight - BOTTOM_THRESHOLD;
@@ -472,50 +515,162 @@ function hideBanner() {
   bannerTimer = null;
 }
 
+// 乐观发送（AC-1.1/1.2/2.3/2.4）：点击发送 → 立即渲染临时气泡（不等服务端响应）→ 并行 POST。
+// 成功 → upgradeOptimisticMsg 升级替换（tempId → serverId，insertedIds 幂等不重复）；失败 → 保留显示 + 重试/删除。
+// 游标纪律：乐观渲染只推进展示游标 clientNewestId，绝不推进轮询游标 pollCursorId（BUG-C）；
+//          失败时恢复 clientNewestId（BUG-D：失败不更新 clientNewestId，展示游标停在最后一条已确认消息上）。
 async function sendMessage() {
   const input = document.getElementById('message-input');
   const content = input.value.trim();
   if (!content) return;
   const sel = document.getElementById('agent-select');
   const target = sel ? sel.value : 'all';
-  const payload = {
-    sender_type: 'user',
-    content: content,
-    target_type: target === 'all' ? 'all' : 'single',
-    target_agent_name: target === 'all' ? null : target,
-    client_msg_id: genClientMsgId()   // F3：携带非空 client_msg_id 启用后端幂等
-  };
-  const res = await fetch(API_BASE + 'api/messages/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  // BUG-D 修复：发送失败（如 single 目标 agent 不存在）不追加、不污染游标，避免退化为全量回放
-  if (!res.ok) {
-    input.value = '';
-    autoGrowInput();   // EXT-3：发送失败也复位高度
-    return;
-  }
-  const data = await res.json();
-  input.value = '';
-  autoGrowInput();   // EXT-3：发送后复位输入框高度到 1 行
-  if (!data || !data.message_id) {
-    return;
-  }
-  // 乐观追加：用返回的 message_id + 输入框 content 即时可见（AC-5.1/5.2），不走全量 loadHistory
-  // 注意：此处只推进展示游标 clientNewestId，不推进轮询游标 pollCursorId（BUG-C 修复）
+  const targetType = target === 'all' ? 'all' : 'single';
+  const targetAgentName = target === 'all' ? null : target;
+  const tempId = genTempId();
+  const clientMsgId = genClientMsgId();   // 每次发送生成新 client_msg_id（AC-2.4：同内容两次发送互不覆盖）
+  const prevNewestId = clientNewestId;    // 失败时恢复展示游标用（BUG-D）
+
+  // 1) 立即渲染乐观气泡（AC-1.1：≤500ms 出现、不等待 POST 响应）
   const optimisticMsg = {
-    id: data.message_id,
+    id: tempId,
     content: content,
     sender_type: 'user',
     sender_agent_name: null,
-    target_type: payload.target_type,
-    target_agent_name: payload.target_agent_name,
+    target_type: targetType,
+    target_agent_name: targetAgentName,
     created_at: '',
-    client_msg_id: null,
+    client_msg_id: clientMsgId,
     read_by: []
   };
-  appendMessage(optimisticMsg);
+  pendingMap.set(tempId, {
+    content: content,
+    targetType: targetType,
+    targetAgentName: targetAgentName,
+    clientMsgId: clientMsgId,
+    sendStatus: 'sending'
+  });
+  appendMessage(optimisticMsg);   // insertedIds.add(tempId) 由 appendMessage 完成
+  input.value = '';               // 输入框立即清空（AC-1.1）
+  autoGrowInput();                // EXT-3：发送后复位输入框高度到 1 行
+
+  // 2) 并行发请求（服务端保持同步落盘；UI 不等落盘完成，AC-1.1/AC-2.1）
+  let res;
+  try {
+    res = await fetch(API_BASE + 'api/messages/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender_type: 'user',
+        content: content,
+        target_type: targetType,
+        target_agent_name: targetAgentName,
+        client_msg_id: clientMsgId
+      })
+    });
+  } catch (e) {
+    markMessageFailed(tempId, prevNewestId);
+    return;
+  }
+  if (!res.ok) {
+    // BUG-D：发送失败（400 目标不存在 / 5xx）→ 保留显示 + 标记「发送失败」，不污染游标
+    markMessageFailed(tempId, prevNewestId);
+    return;
+  }
+  const data = await res.json().catch(() => null);
+  if (!data || !data.message_id) {
+    markMessageFailed(tempId, prevNewestId);
+    return;
+  }
+  upgradeOptimisticMsg(tempId, data.message_id);
+}
+
+// 乐观消息升级替换（AC-1.2 幂等关键）：tempId → serverId。
+// 轮询/历史随后带回 serverId 时 insertedIds.has(serverId) → 不重复追加。
+function upgradeOptimisticMsg(tempId, serverId) {
+  const row = findRowById(tempId);
+  if (row) row.dataset.id = serverId;   // DOM data-id 升级
+  insertedIds.delete(tempId);
+  insertedIds.add(serverId);
+  const pend = pendingMap.get(tempId);
+  if (pend) pend.sendStatus = 'sent';
+  tempToServerId.set(tempId, serverId);
+  // 已读徽标节点登记：id 从 temp 换成 server
+  const st = readStatusNodes.get(tempId);
+  if (st) {
+    readStatusNodes.delete(tempId);
+    readStatusNodes.set(serverId, st);
+    // 升级后重新画真实已读徽标（服务端数据）
+    st.classList.remove('msg-failed');
+    st.innerHTML = '';
+    paintReadStatus({ id: serverId, target_type: pend ? pend.targetType : 'all', target_agent_name: pend ? pend.targetAgentName : null, read_by: [] }, st);
+  }
+  // 展示游标：若最新位是 tempId，升级为 serverId（已确认消息占据最新位）
+  if (clientNewestId === tempId) clientNewestId = serverId;
+  pendingMap.delete(tempId);   // 发送完成（保留 tempToServerId 供追溯）
+}
+
+// 发送失败兜底（AC-2.3）：保留气泡 + 标记「发送失败」+ 重试/删除按钮；恢复展示游标（BUG-D）。
+function markMessageFailed(tempId, prevNewestId) {
+  const pend = pendingMap.get(tempId);
+  if (!pend) return;
+  pend.sendStatus = 'failed';
+  repaintPendingStatus(tempId);
+  // BUG-D：失败消息不更新 clientNewestId（展示游标停在最后一条已确认消息上）
+  if (prevNewestId !== undefined) clientNewestId = prevNewestId;
+}
+
+// 重试（AC-2.3）：复用同一 client_msg_id → 若上次实际已落盘仅响应丢失，服务端幂等返回 dup 同样给 message_id。
+async function retryMessage(tempId) {
+  const pend = pendingMap.get(tempId);
+  if (!pend || pend.sendStatus !== 'failed') return;
+  pend.sendStatus = 'sending';
+  repaintPendingStatus(tempId);
+  let res;
+  try {
+    res = await fetch(API_BASE + 'api/messages/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender_type: 'user',
+        content: pend.content,
+        target_type: pend.targetType,
+        target_agent_name: pend.targetAgentName,
+        client_msg_id: pend.clientMsgId   // 复用同一 client_msg_id（幂等）
+      })
+    });
+  } catch (e) {
+    pend.sendStatus = 'failed';
+    repaintPendingStatus(tempId);
+    return;
+  }
+  if (!res.ok) {
+    pend.sendStatus = 'failed';
+    repaintPendingStatus(tempId);
+    return;
+  }
+  const data = await res.json().catch(() => null);
+  if (!data || !data.message_id) {
+    pend.sendStatus = 'failed';
+    repaintPendingStatus(tempId);
+    return;
+  }
+  upgradeOptimisticMsg(tempId, data.message_id);
+}
+
+// 删除（AC-2.3）：仅对本地乐观消息（未落盘）生效——DOM 移除 + 状态清理；已落盘消息不提供删除。
+function removeMessage(tempId) {
+  const pend = pendingMap.get(tempId);
+  if (!pend) return;
+  const row = findRowById(tempId);
+  if (row) row.remove();
+  const st = readStatusNodes.get(tempId);
+  if (st) st.remove();
+  readStatusNodes.delete(tempId);
+  insertedIds.delete(tempId);
+  pendingMap.delete(tempId);
+  tempToServerId.delete(tempId);
+  // clientNewestId 已在失败时恢复（BUG-D），此处无需再动
 }
 
 // ---- 入口：等待 DOM 就绪 ----

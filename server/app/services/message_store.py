@@ -56,6 +56,56 @@ def _dup_by_client_msg_id(msgs, client_msg_id):
     return None
 
 
+# 系统事件消息（presence_event）文案模板：event -> content。
+# 由服务端生成，保证刷新后文案一致（对齐 AC-1.3 精神）。
+_SYSTEM_EVENT_CONTENT = {
+    "init": "{name} 上线了",
+    "end": "{name} 下线了",
+    "lost": "{name} 已离线（失联超时）",
+    "reactivated": "{name} 重新上线了",
+}
+
+
+def append_system_event(event: str, agent_name: str) -> dict:
+    """把一条系统事件消息（presence_event）追加进 messages.json 消息流（AC-3.4/4.1/4.2/4.3）。
+
+    事件范围：显式 init（上线）/ end（下线）+ 失联自动下线（lost）+ 重注册唤醒（reactivated）。
+
+    关键约束：
+    - sender_type="system"：pull_messages / agent_has_unread 的未读过滤只取 sender_type=="user"，
+      因此系统消息天然不进未读统计、不走 pull 通道、不入 reads.json 回执（AC-4.1）。
+    - 用 update_json_atomic(MESSAGES_FILE, [], _add) 原地修改（D-1 铁律：不可只返回新对象）。
+    - 不写 reads.json（事件消息无回执）。
+
+    返回写入的系统消息 dict。
+    """
+    if event not in _SYSTEM_EVENT_CONTENT:
+        raise ValueError("unknown system event: {0}".format(event))
+    content = _SYSTEM_EVENT_CONTENT[event].format(name=agent_name)
+    holder = {}
+
+    def _add(msgs):
+        msg = {
+            "id": gen_id("msg"),
+            "content": content,
+            "sender_type": "system",
+            "sender_agent_name": agent_name,
+            "target_type": None,
+            "target_agent_name": None,
+            "created_at": now_iso(),
+            "client_msg_id": None,
+            "read_by": [],
+            "message_type": "presence_event",
+            "event": event,
+        }
+        msgs.append(msg)          # 原地修改（update_json_atomic 写回被原地修改的 data）
+        holder["msg"] = msg
+        return None
+
+    update_json_atomic(MESSAGES_FILE, [], _add)
+    return holder.get("msg")
+
+
 def send_user_message(content, target_type, target_agent_name=None, client_msg_id=None):
     """前端发送用户消息：写消息 + 为目标 Agent 建未读回执。对应方案书 §5.3 send_user_message。"""
     msgs = load_messages()

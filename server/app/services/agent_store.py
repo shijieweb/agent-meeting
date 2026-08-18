@@ -31,6 +31,19 @@ STATUS_EVENTS_LOG = "status_events.jsonl"
 _ISO_FMT = "%Y-%m-%dT%H:%M:%S"
 
 
+def _emit_system_event(event, name):
+    """在事件点向消息流追加一条系统消息（presence_event，AC-3.4/4.1/4.2/4.3）。
+
+    函数体内局部导入 message_store：message_store 模块顶层 import 了本模块（load_agents），
+    若本模块顶层再 import message_store 会形成循环依赖；延迟到函数体内导入即可避免。
+    调用方保证事件对应状态已落盘成功后调用（事件写入时机约束）。
+    """
+    if not name:
+        return
+    from .message_store import append_system_event
+    append_system_event(event, name)
+
+
 def load_agents():
     return read_json(AGENTS_FILE, [])
 
@@ -63,6 +76,7 @@ def register_agent(name):
             a["token_hash"] = None            # token 预留（可空，不实现校验）
             save_agents(agents)
             append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "reactivated"})
+            _emit_system_event("reactivated", name)   # 重注册唤醒 → 系统消息「X 重新上线了」（AC-4.3）
             return agents, False, {"reactivated": True}
     # 先清僵尸、再追加新 agent（防注册即删：新注册 last_seen==registered_at，
     # 若保留历史僵尸不清理，_should_delete 的占位判定可能误伤——沿用原注释语义）
@@ -217,6 +231,7 @@ def scan_and_sweep() -> int:
         append_jsonl(SWEEP_LOG, {"ts": ts, "name": name, "action": "lost_to_offline",
                                  "reason": "no heartbeat > LOST_TIMEOUT (1200s)"})
         append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "lost"})
+        _emit_system_event("lost", name)   # 失联自动下线 → 系统消息「X 已离线（失联超时）」（AC-4.3）
     for name in removed_names:
         if not name:
             continue
@@ -301,6 +316,7 @@ def set_session(name, active):
                 "name": name,
                 "event": "session_on" if active else "session_off",
             })
+            _emit_system_event("init" if active else "end", name)   # 显式上线/下线 → 系统消息（AC-4.3）
             return True
     return False
 
