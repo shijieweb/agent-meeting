@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Agent 注册、列表。对应方案书 §5.1 #1/#2。"""
+"""Agent 注册、列表、白名单管理。对应方案书 §5.1 #1/#2 + F-a/F-i 管理接口。"""
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import AgentRegister
+from app.models.schemas import (
+    AgentRegister, AgentManageCreate, AgentManageDelete, AgentManageUpdate,
+)
 from app.services import agent_store, message_store
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -45,6 +47,9 @@ def register(body: AgentRegister):
         raise HTTPException(status_code=422, detail="agent name must not be blank")
     if "/" in name:   # F6：禁含 '/'（修复 /{name}/session 路径 404；不调用 register_agent → 不入库）
         raise HTTPException(status_code=422, detail="agent name must not contain '/'")
+    # F-a.4：白名单校验（替代原自动建表）；非白名单名 → 403（Q6 统一拦截语义）
+    if not agent_store.agent_exists(name):
+        raise HTTPException(status_code=403, detail="agent not in whitelist: " + name)
     agents, created, info = agent_store.register_agent(name)
     if created:
         return {"status": "ok", "message": "Agent registered successfully"}
@@ -69,3 +74,60 @@ def prune_agents():
     """手动清理僵尸占位 agent（管理兜底；删除判定=占位>1h / 离线>6h20min，并清理已读集合孤儿文件）。"""
     removed = agent_store.prune_zombie_agents()
     return {"status": "ok", "removed": removed}
+
+
+# ---------------------------------------------------------------------------
+# F-a / F-e / F-f / F-h / F-i：白名单管理接口（不鉴权，部署层内网隔离，AC-1.3）
+# ---------------------------------------------------------------------------
+
+@router.post("/manage/create")
+def manage_create_endpoint(body: AgentManageCreate):
+    """白名单预注册（幂等 upsert）：name 必填；read_scope 非法 → 400；已存在返回既有不覆盖。"""
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    read_scope = body.read_scope or "all"
+    if read_scope not in ("all", "direct"):
+        raise HTTPException(status_code=400, detail="read_scope must be 'all' or 'direct'")
+    agent = agent_store.manage_create(name, body.description or "", read_scope)
+    return {"status": "ok", "agent": agent}
+
+
+@router.post("/manage/delete")
+def manage_delete_endpoint(body: AgentManageDelete):
+    """白名单删除：按 name 移除 + 级联清 reads.json + agent_read_<name>.json（F-f）。"""
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    agent_store.manage_delete(name)
+    return {"status": "ok", "removed": True}
+
+
+@router.get("/manage/list")
+def manage_list_endpoint():
+    """白名单列表：返回全部 Agent（含 presence / has_unread），供 ☰ 面板渲染。"""
+    return {"agents": agent_store.manage_list()}
+
+
+@router.patch("/manage/update")
+def manage_update_endpoint(body: AgentManageUpdate):
+    """白名单更新：改 description / read_scope（name 不可改，F-i / AC-9.1）。
+
+    - name 缺失/空 → 400
+    - 请求携带 new_name（改名诉求，设计上不可达）→ 400（name 不可改）
+    - name 不存在 → 404
+    - read_scope 非法 → 400
+    """
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    # F-i / AC-9.1：name 不可改（无 new_name 字段）；请求携带 new_name（改名诉求） → 400
+    extra = getattr(body, "model_extra", None) or {}
+    if "new_name" in extra:
+        raise HTTPException(status_code=400, detail="name is immutable, cannot rename agent")
+    if body.read_scope is not None and body.read_scope not in ("all", "direct"):
+        raise HTTPException(status_code=400, detail="read_scope must be 'all' or 'direct'")
+    agent = agent_store.manage_update(name, body.description, body.read_scope)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="agent not found: " + name)
+    return {"status": "ok", "agent": agent}

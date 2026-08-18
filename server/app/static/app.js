@@ -1,5 +1,9 @@
 let currentAgentList = [];
 
+// F-g.2 / Q5：前端离线着色窗口配置（来自 GET /api/config，避免硬编码 1200/600）。
+// 兜底：读取失败则用 offline_window=7200 / online_window=1200（design §5.4）。
+let cfg = { offline_window: 7200, online_window: 1200 };
+
 // ---- 相对路径 base（B 修复）：兼容反代剥离前缀 ----
 // '/meeting' → '/meeting/'；'/meeting/' → '/meeting/'；'/' → '/'
 // 全部 API 都基于该 base 拼接，域名反代形态（agnes.owen1.de5.net/meeting）下不再 404。
@@ -84,9 +88,11 @@ function renderMarkdown(src) {
 }
 
 async function init() {
+  await loadConfig();           // F-g.2 / Q5：先读配置（offline_window 等）
   await loadAgents();
   await loadInitialPage();      // 首屏只取一页（?limit=30），取代全量 loadHistory
   await loadAgentStatus();
+  setupPanel();                 // F-e / §3.5：☰ 面板（事件绑定 + 列表渲染）
   setInterval(loadAgentStatus, 3000); // presence：状态栏 ≤5s 刷新（拍板 + PRD §2.5）
   setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
   setInterval(refreshReadReceipts, 5000); // 每5秒同步已读回执，刷新已渲染消息的 ✓/○ 徽标
@@ -103,13 +109,27 @@ async function init() {
   }
 }
 
+// F-g.2 / Q5：从 GET /api/config 读取离线着色窗口等配置（替换硬编码 1200/600）。
+async function loadConfig() {
+  try {
+    const res = await fetch(API_BASE + 'api/config');
+    const data = await res.json();
+    if (data && data.offline_window) cfg.offline_window = data.offline_window;
+    if (data && data.online_window) cfg.online_window = data.online_window;
+  } catch (e) {
+    // 兜底：保留 offline_window=7200 / online_window=1200
+  }
+}
+
 // presence（服务端权威三态 online/lost/offline）：统一在线判定。
-// 优先用 /api/agents/status 返回的 presence 字段；fallback（旧缓存 JS / 兼容）按 last_seen ≤1200s。
+// 优先用 /api/agents/status 返回的 presence 字段；fallback 按 session 取 offline/online 窗口（来自 cfg）。
 function isOnline(a) {
   if (a.presence !== undefined) return a.presence === 'online';
   if (!a.last_seen) return false;
+  // F-g.2 / Q5：窗口读 cfg（session=开会态用 offline_window，否则 online_window），消除硬编码 1200
+  const win = a.session ? cfg.offline_window : cfg.online_window;
   return a.status !== 'offline' &&
-         (Date.now() - new Date(a.last_seen).getTime()) / 1000 <= 1200;
+         (Date.now() - new Date(a.last_seen).getTime()) / 1000 <= win;
 }
 
 async function loadAgentStatus() {
@@ -346,6 +366,7 @@ function findRowById(id) {
 
 // 追加到列表底部；去重时原地刷新已读徽标（read_by 可能已变），不重建气泡、不 innerHTML 清空
 function appendMessage(msg) {
+  if (msg.visible === 0) return;   // F-d / AC-4.3：不渲染可见性为 0 的系统确认消息（双保险，history 已过滤）
   const list = document.getElementById('message-list');
   if (insertedIds.has(msg.id)) {
     // 已渲染：只根据最新 read_by 重画已读徽标（修复「已读状态不随数据同步刷新」）
@@ -365,6 +386,7 @@ function appendMessage(msg) {
 
 // 前置插入到列表顶部；去重时原地刷新已读徽标；更新 oldest 游标（AC-4.1）
 function prependMessage(msg) {
+  if (msg.visible === 0) return;   // F-d / AC-4.3：不渲染可见性为 0 的系统确认消息
   const list = document.getElementById('message-list');
   if (insertedIds.has(msg.id)) {
     const st = readStatusNodes.get(msg.id);
@@ -671,6 +693,165 @@ function removeMessage(tempId) {
   pendingMap.delete(tempId);
   tempToServerId.delete(tempId);
   // clientNewestId 已在失败时恢复（BUG-D），此处无需再动
+}
+
+// ---- F-e / §3.5：☰ 浮动管理面板（不跳页）----
+// 四态色标（presence / status / has_unread / last_seen==registered_at 推导，design §5.2）：
+//   待接入(蓝) / 待命(黄) / 处理中(绿) / 已收工(灰)
+function derivePanelState(a) {
+  if (a.presence === 'offline' || a.status === 'offline') {
+    return { key: 'st-offline', label: '已收工' };          // 灰
+  }
+  if (a.last_seen && a.last_seen === a.registered_at) {
+    return { key: 'st-pending', label: '待接入' };           // 蓝（注册后从未 pull）
+  }
+  if (a.status === 'working' || a.has_unread) {
+    return { key: 'st-active', label: '处理中' };            // 绿
+  }
+  return { key: 'st-idle', label: '待命' };                   // 黄
+}
+
+function setupPanel() {
+  const toggle = document.getElementById('panel-toggle');
+  const close = document.getElementById('panel-close');
+  const panel = document.getElementById('agent-panel');
+  if (toggle && panel) {
+    toggle.addEventListener('click', async () => {
+      panel.classList.toggle('hidden');                      // 仅切换 display，URL 不变、不跳页（AC-5.1）
+      if (!panel.classList.contains('hidden')) {
+        await loadPanelAgents();                             // 展开即拉最新列表
+      }
+    });
+  }
+  if (close && panel) {
+    close.addEventListener('click', () => panel.classList.add('hidden'));
+  }
+  const form = document.getElementById('panel-create-form');
+  if (form) {
+    form.addEventListener('submit', onCreateAgent);
+  }
+}
+
+async function loadPanelAgents() {
+  const list = document.getElementById('panel-agent-list');
+  if (!list) return;
+  try {
+    const res = await fetch(API_BASE + 'api/agents/manage/list');
+    const data = await res.json();
+    list.innerHTML = '';
+    (data.agents || []).forEach(a => list.appendChild(buildPanelRow(a)));
+  } catch (e) { /* 面板加载失败不阻断聊天 */ }
+}
+
+function buildPanelRow(a) {
+  const row = document.createElement('div');
+  row.className = 'panel-agent-row';
+  row.dataset.name = a.name || '';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'pa-name';
+  nameEl.textContent = a.name || '';
+
+  const descEl = document.createElement('div');                 // F-h / AC-5.2/8.2：角色介绍
+  descEl.className = 'pa-desc';
+  descEl.textContent = a.description || '';
+
+  const st = derivePanelState(a);
+  const stateEl = document.createElement('span');               // §3.5 四态色标
+  stateEl.className = 'pa-state ' + st.key;
+  stateEl.textContent = st.label;
+
+  const lastSeen = document.createElement('div');               // AC-5.2：最后活动
+  lastSeen.className = 'pa-last';
+  lastSeen.textContent = '最后活动: ' + (a.last_seen || '-');
+
+  const scopeSel = document.createElement('select');            // F-e.2 / AC-5.4：可见性下拉
+  scopeSel.className = 'pa-scope';
+  scopeSel.innerHTML = '<option value="all">所有人</option><option value="direct">仅私信</option>';
+  scopeSel.value = a.read_scope || 'all';
+  scopeSel.addEventListener('change', () => onUpdateAgent(a.name, null, scopeSel.value));
+
+  const descInput = document.createElement('input');            // F-e.2 / AC-5.4：行内改角色介绍
+  descInput.className = 'pa-desc-input';
+  descInput.type = 'text';
+  descInput.placeholder = '改角色介绍';
+  descInput.value = a.description || '';
+
+  const saveDesc = document.createElement('button');
+  saveDesc.className = 'pa-btn';
+  saveDesc.textContent = '保存';
+  saveDesc.addEventListener('click', () => onUpdateAgent(a.name, descInput.value, scopeSel.value));
+
+  const delBtn = document.createElement('button');             // AC-5.2/5.5：删除按钮
+  delBtn.className = 'pa-btn pa-del';
+  delBtn.textContent = '删除';
+  delBtn.addEventListener('click', () => onDeleteAgent(a.name));
+
+  const meta = document.createElement('div');
+  meta.className = 'pa-meta';
+  meta.appendChild(stateEl);
+  meta.appendChild(lastSeen);
+
+  const actions = document.createElement('div');
+  actions.className = 'pa-actions';
+  actions.appendChild(descInput);
+  actions.appendChild(saveDesc);
+  actions.appendChild(scopeSel);
+  actions.appendChild(delBtn);
+
+  row.appendChild(nameEl);
+  row.appendChild(descEl);
+  row.appendChild(meta);
+  row.appendChild(actions);
+  return row;
+}
+
+// F-e.3 / AC-5.3：创建表单提交 → manage/create → 列表立即刷新
+async function onCreateAgent(e) {
+  e.preventDefault();
+  const name = document.getElementById('panel-name').value.trim();
+  const desc = document.getElementById('panel-desc').value.trim();
+  const scope = document.getElementById('panel-scope').value;
+  if (!name) return;
+  try {
+    await fetch(API_BASE + 'api/agents/manage/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, description: desc, read_scope: scope }),
+    });
+    document.getElementById('panel-name').value = '';
+    document.getElementById('panel-desc').value = '';
+    await loadPanelAgents();   // 实时刷新（AC-5.3）
+    loadAgents();              // 同步刷新聊天下拉
+  } catch (e) { /* 失败不阻断 */ }
+}
+
+// F-i / AC-5.4/9.2：行内改 description/read_scope → manage/update → 列表实时刷新
+async function onUpdateAgent(name, description, read_scope) {
+  const body = { name: name };
+  if (description !== null && description !== undefined) body.description = description;
+  if (read_scope) body.read_scope = read_scope;
+  try {
+    await fetch(API_BASE + 'api/agents/manage/update', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    await loadPanelAgents();   // 实时刷新（AC-5.4/9.2）
+  } catch (e) { /* 失败不阻断 */ }
+}
+
+// F-f / AC-5.5：删除 → manage/delete → 列表移除
+async function onDeleteAgent(name) {
+  try {
+    await fetch(API_BASE + 'api/agents/manage/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    });
+    await loadPanelAgents();   // 实时刷新（AC-5.5）
+    loadAgents();              // 同步刷新聊天下拉
+  } catch (e) { /* 失败不阻断 */ }
 }
 
 // ---- 入口：等待 DOM 就绪 ----

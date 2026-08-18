@@ -10,8 +10,8 @@
     // '/meeting' → '/meeting/'；'/meeting/' → '/meeting/'；'/' → '/'
     var base = location.pathname;
     if (base.charAt(base.length - 1) !== '/') base += '/';
-    document.write('<link rel="stylesheet" href="' + base + 'static/styles.css?v=20260818-1">');
-    document.write('<script src="' + base + 'static/app.js?v=20260818-1"><\/script>');
+    document.write('<link rel="stylesheet" href="' + base + 'static/styles.css?v=20260818-2">');
+    document.write('<script src="' + base + 'static/app.js?v=20260818-2"><\/script>');
   })();
   </script>
 </head>
@@ -20,7 +20,28 @@
     <header class="chat-header">
       <h1>小伙伴会议系统</h1>
       <div id="agent-status" class="agent-status"></div>
+      <!-- F-e / §3.5：右上角 ☰ 浮动管理面板按钮（不跳页） -->
+      <button id="panel-toggle" class="panel-toggle" aria-label="管理面板">☰</button>
     </header>
+
+    <!-- F-e / §3.5：☰ 浮动管理面板（不跳页，URL 不变） -->
+    <div id="agent-panel" class="agent-panel hidden">
+      <div class="panel-header">
+        <span>Agent 管理</span>
+        <button id="panel-close" class="panel-close" aria-label="关闭">×</button>
+      </div>
+      <div id="panel-agent-list" class="panel-agent-list"></div>
+      <form id="panel-create-form" class="panel-create-form">
+        <input id="panel-name" type="text" placeholder="名字" maxlength="200" required>
+        <input id="panel-desc" type="text" placeholder="角色介绍" maxlength="500">
+        <select id="panel-scope" aria-label="可见性">
+          <option value="all">所有人(@all)</option>
+          <option value="direct">仅私信(direct)</option>
+        </select>
+        <button type="submit">添加</button>
+      </form>
+    </div>
+
     <main id="message-list" class="message-list"></main>
     <footer class="input-area">
       <textarea id="message-input" class="message-input" placeholder="输入消息..." autocomplete="off" rows="1"></textarea>

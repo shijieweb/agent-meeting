@@ -203,8 +203,12 @@ def do_pull(name, interval=3.0, max_iters=1000):
     return []
 
 
-def do_reply(name, msg_id, content=None, content_file=None):
-    """发消息：--msg 直传文本；--file 作长文本备选（utf-8，优先级高于 --msg）。"""
+def do_reply(name, msg_id, content=None, content_file=None, target_type=None, target_agent=None):
+    """发消息：--msg 直传文本；--file 作长文本备选（utf-8，优先级高于 --msg）。
+
+    F-c（连接器可用）：新增 --target-type / --target-agent，把目标透传给 /api/messages/reply，
+    实现 Agent 互 @（回复某 Agent 或 @all 广播）。缺省不传 → 服务端兼容旧义（回复人类老板）。
+    """
     if content_file:
         with open(content_file, encoding="utf-8") as f:
             content = f.read()
@@ -214,12 +218,18 @@ def do_reply(name, msg_id, content=None, content_file=None):
     ensure_registered(name)
     n = next(_reply_seq)                            # F7：进程内序号（可读递增）
     client_msg_id = "c_{0}_{1}_{2}".format(msg_id or "", n, int(time.time() * 1000000))  # +微秒时间戳：跨进程唯一
-    r = _req("POST", "/api/messages/reply", {
+    body = {
         "agent_name": name,
         "content": content,
         "reply_to_message_id": msg_id,
         "client_msg_id": client_msg_id,
-    })
+    }
+    # F-c：仅在显式给出时透传，不破旧调用（旧调用不传 → 服务端按回复人类老板处理）
+    if target_type:
+        body["target_type"] = target_type
+    if target_agent:
+        body["target_agent_name"] = target_agent
+    r = _req("POST", "/api/messages/reply", body)
     print(json.dumps(r, ensure_ascii=False, indent=2))
     return r
 
@@ -239,6 +249,10 @@ def main():
     p.add_argument("--msg-id", dest="msg_id", help="reply 用：目标消息 id")
     p.add_argument("--msg", dest="msg", help="reply 用：直接传入文本（PYTHONUTF8=1 防命令行中文乱码）")
     p.add_argument("--file", dest="content_file", help="reply 用：长文本文件路径(utf-8)，优先级高于 --msg")
+    p.add_argument("--target-type", dest="target_type", default=None,
+                   help="reply 用（F-c 互@）：single|all（缺省回复人类老板=user）")
+    p.add_argument("--target-agent", dest="target_agent", default=None,
+                   help="reply 用（F-c 互@）：single 时的目标 Agent 名")
     p.add_argument("--interval", dest="interval", type=float, default=3.0,
                    help="pull/watch 轮询间隔秒数（默认3）")
     p.add_argument("--max", dest="max_iters", type=int, default=1000,
@@ -284,7 +298,8 @@ def main():
             print("reply 需要 --msg-id", file=sys.stderr)
             sys.exit(2)
         name = resolve_name(args.name)
-        do_reply(name, args.msg_id, content=args.msg, content_file=args.content_file)
+        do_reply(name, args.msg_id, content=args.msg, content_file=args.content_file,
+                 target_type=args.target_type, target_agent=args.target_agent)
         return
 
 

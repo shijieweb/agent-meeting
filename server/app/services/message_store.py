@@ -151,8 +151,10 @@ def send_user_message(content, target_type, target_agent_name=None, client_msg_i
             if target_agent_name:
                 reads.append({"message_id": msg["id"], "agent_name": target_agent_name, "read_at": None})
         elif target_type == "all":
-            for a in load_agents():   # R8：仅已注册 agent 建回执
-                reads.append({"message_id": msg["id"], "agent_name": a["name"], "read_at": None})
+            for a in load_agents():
+                # F-b / AC-2.4：@all 回执范围 = 仅 read_scope=="all" 的 Agent（direct 跳过广播）
+                if a.get("read_scope", "all") == "all":
+                    reads.append({"message_id": msg["id"], "agent_name": a["name"], "read_at": None})
         return None
 
     update_json_atomic(READS_FILE, [], _mut_reads)
@@ -172,6 +174,56 @@ def _mark_reads_json(agent_name, message_ids):
         return reads
 
     update_json_atomic(READS_FILE, [], _mut)
+
+
+def maybe_generate_ack(orig_msg, receiver_name):
+    """F-d 自动确认系统消息：B 拉到 A→B 的 single 消息后，给原 sender A 生成 1 条 system ack。
+
+    orig_msg：B 拉到的 single 消息；receiver_name=B（当前拉取方）。
+    仅当 orig_msg 由某 agent（sender_agent_name 非空）单发给 B 时触发（人类发的无 agent 可回执）。
+    报文：sender_type="system"、target_type="single"、target_agent_name=原 sender、
+          visible=0、content="{receiver_name} 已收到你的消息，正在思考，稍后回复"、
+          reply_to_message_id=orig_msg.id、sender_agent_name=receiver_name。
+    幂等①：messages.json 已存在同 reply_to_message_id 且 target_agent_name==原 sender 的 ack → 跳过。
+    幂等②：pull 已读集合只返回一次（首次未读才进 unread → 仅触发一次）。
+    落库走 update_json_atomic（全局 RLock），与并发 send/reply 不会互相覆盖（与 c9da420b 同机制）。
+    """
+    sender = orig_msg.get("sender_agent_name")
+    if not sender:
+        return                                            # 人类发的，无 agent 可回执
+    if orig_msg.get("target_type") != "single":
+        return                                            # 仅 single 触发（Q1：A→B 的 single 消息）
+    if orig_msg.get("target_agent_name") != receiver_name:
+        return
+    msg_id = orig_msg.get("id")
+    if not msg_id:
+        return
+    # 幂等①：messages.json 已存在同 reply_to_message_id 的 ack 则跳过
+    existing = load_messages()
+    for m in existing:
+        if (m.get("sender_type") == "system"
+                and m.get("reply_to_message_id") == msg_id
+                and m.get("target_agent_name") == sender):
+            return
+
+    def _add(msgs):
+        ack = {
+            "id": gen_id("msg"),
+            "content": "{0} 已收到你的消息，正在思考，稍后回复".format(receiver_name),
+            "sender_type": "system",
+            "sender_agent_name": receiver_name,
+            "target_type": "single",
+            "target_agent_name": sender,               # 回执给原 sender（AC-4.1：target_agent_name==原 sender）
+            "reply_to_message_id": msg_id,
+            "visible": 0,                              # 网页/历史不渲染（F-d / AC-4.3）
+            "created_at": now_iso(),
+            "client_msg_id": None,
+            "read_by": [],
+        }
+        msgs.append(ack)                               # 原地修改（update_json_atomic 写回）
+        return None
+
+    update_json_atomic(MESSAGES_FILE, [], _add)
 
 
 def pull_messages(agent_name):
@@ -217,14 +269,31 @@ def pull_messages(agent_name):
                     and m.get("created_at") < reg_ts
                 }
             s |= seed
+        # 读取本 agent 的 read_scope 用于广播路由（F-b / AC-2.2/2.3）
+        my_read_scope = "all"
+        for a in load_agents():
+            if a.get("name") == agent_name:
+                my_read_scope = a.get("read_scope", "all")
+                break
         unread = []
         for msg in msgs:
-            if msg["sender_type"] != "user":
+            st = msg.get("sender_type")
+            # F-d 自动确认系统消息透传：仅「发给本 agent 且 visible==0」的 ack 返回给本 agent
+            # （presence_event 无 visible 字段 → 不命中，仍按原逻辑跳过）
+            if st == "system":
+                if msg.get("target_agent_name") == agent_name and msg.get("visible") == 0:
+                    if msg["id"] not in s:
+                        unread.append(msg)
+                        s.add(msg["id"])
                 continue
-            targeted = (
-                (msg["target_type"] == "single" and msg["target_agent_name"] == agent_name)
-                or msg["target_type"] == "all"
-            )
+            if st != "user" and st != "agent":
+                continue
+            # user / agent 消息：按 read_scope 路由（F-b）
+            targeted = False
+            if msg.get("target_type") == "single":
+                targeted = (msg.get("target_agent_name") == agent_name)
+            elif msg.get("target_type") == "all":
+                targeted = (my_read_scope == "all")     # read_scope=direct 跳过 @all 广播
             if not targeted:
                 continue
             if msg["id"] in s:
@@ -238,6 +307,14 @@ def pull_messages(agent_name):
 
     update_json_atomic(agent_read_set_file(agent_name), [], _mut)
     unread = read_holder.get("unread", [])
+    # F-d：对每条「未读、sender 为 user/agent、target single 命中本 agent」的消息，
+    # 给原 sender 生成 1 条 system ack（幂等靠 messages.json 已存在同 reply_to_message_id 的 ack + pull 已读集合）。
+    for m in unread:
+        if (m.get("sender_type") in ("user", "agent")
+                and m.get("sender_agent_name")
+                and m.get("target_type") == "single"
+                and m.get("target_agent_name") == agent_name):
+            maybe_generate_ack(m, agent_name)
     if unread:
         # 服务端持久化已读：per-agent 集合（已写入）+ reads.json 回执（前端展示）
         _mark_reads_json(agent_name, [m["id"] for m in unread])
@@ -278,11 +355,20 @@ def agent_has_unread(name):
     return False
 
 
-def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=None):
+def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=None,
+                 target_type=None, target_agent_name=None):
     """Agent 提交回复：保存回复，并捎带返回该 Agent 剩余未读消息。对应方案书 §5.3 submit_reply。
 
+    F-c：target_type / target_agent_name 透传（缺省 None → 兼容旧义视为回复人类老板，归一化为 "user"）。
     消息追加用 update_json_atomic 保证原子（并发回复不会互相覆盖）。
     """
+    # 归一化 target（F-c）：仅接受 single/all/user；其余（含 None）→ "user"（兼容旧调用，回复人类老板）；
+    # 非 single 时 target_agent_name 一律清空（@all / @user 无单名目标）。
+    if target_type not in ("single", "all", "user"):
+        target_type = "user"
+    if target_type != "single":
+        target_agent_name = None
+
     def _add(msgs):
         dup = _dup_by_client_msg_id(msgs, client_msg_id)
         if dup:
@@ -292,8 +378,8 @@ def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=No
             "content": content,
             "sender_type": "agent",
             "sender_agent_name": agent_name,
-            "target_type": "user",
-            "target_agent_name": None,
+            "target_type": target_type,
+            "target_agent_name": target_agent_name,
             "reply_to_message_id": reply_to_message_id,   # F3：不再静默丢弃（缺省 None → JSON null，兼容旧调用）
             "created_at": now_iso(),
             "client_msg_id": client_msg_id,
@@ -365,6 +451,9 @@ def get_history(since_id=None, before_id=None, limit=30):
 
     out = []
     for i, m in selected:
+        # F-d / AC-4.3：过滤可见性为 0 的系统确认消息（presence_event 无 visible 字段 → 仍展示）
+        if m.get("visible") == 0:
+            continue
         d = dict(m)
         if m["sender_type"] == "user":
             d["read_by"] = [

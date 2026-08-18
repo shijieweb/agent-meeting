@@ -12,6 +12,9 @@ router = APIRouter(prefix="/api/messages", tags=["messages"])
 
 @router.get("/pull")
 def pull(agent_name: str = Query(..., description="Agent 名字")):
+    # F-a.5：白名单校验；非白名单名 → 403（Q6 统一拦截语义）。
+    if not agent_store.agent_exists(agent_name):
+        raise HTTPException(status_code=403, detail="agent not in whitelist: " + agent_name)
     # 未读下沉：pull_messages 仅返回该 agent 未读 user 消息，并在服务端持久化已读
     # （per-agent 已读集合 data/agent_read_<X>.json + reads.json 回执），客户端只透传。
     return {"messages": message_store.pull_messages(agent_name)}
@@ -19,9 +22,18 @@ def pull(agent_name: str = Query(..., description="Agent 名字")):
 
 @router.post("/reply")
 def reply(body: MessageReply):
-    # T-REPLY-04：未注册 Agent 回复 → 返回错误（不保存）
+    # F-a.6 / Q6：未注册 Agent 回复 → 403（原 400 升 403，白名单拦截语义）。
     if not agent_store.agent_exists(body.agent_name):
-        raise HTTPException(status_code=400, detail="agent not registered: " + body.agent_name)
+        raise HTTPException(status_code=403, detail="agent not in whitelist: " + body.agent_name)
+    # F-c.2 / Q6：single 须校验 target_agent_name 白名单（缺 → 400 参数错误；未白名单 → 403）。
+    if body.target_type == "single":
+        if not body.target_agent_name:
+            raise HTTPException(status_code=400, detail="single target requires target_agent_name")
+        if not agent_store.agent_exists(body.target_agent_name):
+            raise HTTPException(
+                status_code=403,
+                detail="target agent not in whitelist: " + body.target_agent_name,
+            )
     # F11：业务上限校验（方案①）。仅校验 >REPLY_MAX_LEN(=4000) 返回 400；
     # <=4000（含老板常见 ~500 字长回复）全接受入库。绝不使用 100 字阈值。
     if len(body.content) > REPLY_MAX_LEN:
@@ -30,7 +42,8 @@ def reply(body: MessageReply):
             detail="reply too long: {0} > REPLY_MAX_LEN ({1})".format(len(body.content), REPLY_MAX_LEN),
         )
     return message_store.submit_reply(
-        body.agent_name, body.content, body.reply_to_message_id, body.client_msg_id
+        body.agent_name, body.content, body.reply_to_message_id, body.client_msg_id,
+        body.target_type, body.target_agent_name,
     )
 
 
@@ -40,8 +53,12 @@ def send(body: MessageSend):
     if body.target_type == "single":
         if not body.target_agent_name:
             raise HTTPException(status_code=400, detail="single target requires target_agent_name")
+        # F-a.7 / Q6：target_agent_name 未白名单 → 403（原 400 升 403，白名单拦截语义）
         if not agent_store.agent_exists(body.target_agent_name):
-            raise HTTPException(status_code=400, detail="target agent not found: " + body.target_agent_name)
+            raise HTTPException(
+                status_code=403,
+                detail="target agent not in whitelist: " + body.target_agent_name,
+            )
     msg = message_store.send_user_message(
         body.content, body.target_type, body.target_agent_name, body.client_msg_id
     )

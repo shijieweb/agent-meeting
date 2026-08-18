@@ -22,6 +22,7 @@ from .storage import (
 )
 
 AGENTS_FILE = "agents.json"
+READS_FILE = "reads.json"    # 引用同 message_store.READS_FILE，避免顶层 import 形成循环依赖
 
 # JSONL 日志文件名（DATA_DIR 下，gitignored，只追加不覆盖）
 SWEEP_LOG = "sweep_log.jsonl"
@@ -87,7 +88,8 @@ def register_agent(name):
         agents[:] = [a for a in agents if not _should_delete(a)]
         ts = now_iso()
         agents.append({"name": name, "registered_at": ts, "last_seen": ts,
-                       "status": "waiting", "session": False, "token_hash": None})
+                       "status": "waiting", "session": False, "token_hash": None,
+                       "description": "", "read_scope": "all"})   # F-b/h：补 description/read_scope 缺省
         holder.update(created=True, info={"reactivated": False}, ts=ts)
         return None
 
@@ -347,5 +349,111 @@ def get_agent_statuses():
             "status": a.get("status", "waiting"),
             "session": a.get("session", False),
             "presence": derive_state(a),
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# F-a / F-b / F-f / F-h / F-i：白名单管理接口（不鉴权，部署层内网隔离）
+# ---------------------------------------------------------------------------
+
+def manage_create(name, description="", read_scope="all"):
+    """白名单预注册（幂等 upsert）。
+
+    name 不存在 → append 新记录（registered_at/last_seen=now, status=waiting,
+    session=False, token_hash=None, description, read_scope）；
+    已存在 → 返回既有记录（200，不覆盖），便于 Q4 seed 幂等重跑。
+
+    返回：该 name 对应的全量记录（新创建或既有）。
+    """
+    name = (name or "").strip()
+    holder = {}
+
+    def _mut(agents):
+        for a in agents:
+            if a.get("name") == name:
+                holder["agent"] = a          # 已存在：返回既有，不覆盖
+                return None
+        ts = now_iso()
+        rec = {
+            "name": name,
+            "registered_at": ts,
+            "last_seen": ts,
+            "status": "waiting",
+            "session": False,
+            "token_hash": None,
+            "description": description,
+            "read_scope": read_scope,
+        }
+        agents.append(rec)
+        holder["agent"] = rec
+        return None
+
+    update_json_atomic(AGENTS_FILE, [], _mut)
+    return holder["agent"]
+
+
+def manage_delete(name):
+    """白名单删除：从 agents.json 移除该 name；级联清 reads.json 中 agent_name==name 的全部回执（F-f）；
+    并删除 agent_read_<name>.json（per-agent 已读集合文件，幂等）。"""
+    def _mut_agents(agents):
+        agents[:] = [a for a in agents if a.get("name") != name]
+        return None
+
+    update_json_atomic(AGENTS_FILE, [], _mut_agents)
+
+    def _mut_reads(reads):
+        # 级联删：清掉该 agent 的全部回执记录（F-f 级联删脏数据）
+        reads[:] = [r for r in reads if r.get("agent_name") != name]
+        return None
+
+    update_json_atomic(READS_FILE, [], _mut_reads)
+    delete_agent_read_set(name)         # 清理 per-agent 已读集合文件
+    return True
+
+
+def manage_update(name, description=None, read_scope=None):
+    """白名单更新：仅改 description / read_scope（name 不可改，F-i）。
+
+    返回更新后的全量记录；name 不存在返回 None（调用方应转 404）。
+    """
+    holder = {}
+
+    def _mut(agents):
+        for a in agents:
+            if a.get("name") == name:
+                if description is not None:
+                    a["description"] = description
+                if read_scope is not None:
+                    a["read_scope"] = read_scope
+                holder["agent"] = a
+                return None
+        return None
+
+    update_json_atomic(AGENTS_FILE, [], _mut)
+    return holder.get("agent")
+
+
+def manage_list():
+    """白名单列表：返回全部 Agent（含 presence / has_unread）。
+
+    presence：derive_state 派生（online/lost/offline）；
+    has_unread：message_store.agent_has_unread（局部导入避免与 message_store→agent_store 循环依赖）。
+    """
+    from .message_store import agent_has_unread
+    agents = load_agents()
+    result = []
+    for a in agents:
+        name = a.get("name")
+        result.append({
+            "name": name,
+            "description": a.get("description", ""),
+            "read_scope": a.get("read_scope", "all"),
+            "status": a.get("status", "waiting"),
+            "last_seen": a.get("last_seen"),
+            "session": a.get("session", False),
+            "registered_at": a.get("registered_at"),
+            "presence": derive_state(a),
+            "has_unread": agent_has_unread(name),
         })
     return result

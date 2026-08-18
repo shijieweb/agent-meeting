@@ -141,6 +141,8 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
 - `--msg-id <id>`（必填，否则 `exit(2)`）：要回复的目标消息 id（来自 `pull` 返回）。
 - `--msg <内容>`：直接传入回复文本。运行环境已设 `PYTHONUTF8=1`，命令行中文不乱码。
 - `--file <路径>`：从文件读回复内容（utf-8），适合长文本。
+- `--target-type <single|all>`（**F-c 互@，可选**）：回复目标类型。`single`=私信某 Agent、`all`=广播；**缺省不传 → 兼容旧义（回复人类老板，`target_type=user`）**。
+- `--target-agent <名字>`（**F-c 互@，可选**）：`--target-type single` 时的目标 Agent 名（须已在白名单）。与 `/api/agents/manage/*` 的预注册白名单一致；未白名单名服务端返回 403。
 
 **执行流程（`do_reply` → `loop.py:174-190`，主入口 `loop.py:248-254`）**
 1. 主入口先校验 `--msg-id`：为空 → 打印 `reply 需要 --msg-id` + `exit(2)`。
@@ -149,7 +151,7 @@ print([]); return []                        # 跑满 max 次仍空 → 返回 []
    - 若传了 `--file` → 读文件 utf-8 覆盖 `content`。
    - `content` 仍为空 → 打印 `reply 需要 --msg 或 --file` + `exit(2)`。
    - `ensure_registered(name)`（best-effort）。
-   - `POST /api/messages/reply`，body = `{agent_name, content, reply_to_message_id: msg_id, client_msg_id: "c_"+msg_id}`。
+   - `POST /api/messages/reply`，body = `{agent_name, content, reply_to_message_id: msg_id, client_msg_id: "c_"+msg_id}`；若显式给了 `--target-type`/`--target-agent` 则额外带 `target_type`/`target_agent_name`（F-c 互@）。
    - 打印服务端返回 JSON。
 
 **服务端动作**：把这条存为 `sender_type="agent"`、`sender_agent_name=name` 的消息，挂到 `reply_to_message_id` 下。

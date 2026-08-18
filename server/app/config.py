@@ -19,6 +19,9 @@ REPLY_MAX_LEN = 4000
 # ---- 在线/离线状态自动化（presence 管理）----
 ONLINE_WINDOW = 1200                 # 在线窗口（秒），统一=失联阈值，消除 600/120 双窗口闪烁
 LOST_TIMEOUT = 1200                  # 失联阈值：>20min 无任何正常请求 = 失联（老板拍板 §5.1-1）
+# F-g.1：离线判定窗口（session=1 时），默认 7200s（10 分钟→2 小时，老板拍板 §3.5）。
+# 前端 via GET /api/config 读取 offline_window，不再硬编码 1200（design §0.7/§5.4）。
+OFFLINE_WINDOW_SECONDS = 7200
 LOST_GRACE_BEFORE_DELETE = 6 * 3600  # 失联/离线保留期：6h（老板拍板 §5.1-2）
 # 惰性清扫节流：60s 内最多真正扫描一次（老板拍板 §5.1-5）。
 # 支持环境变量覆盖（默认 60）：隔离集成测试设 0 让每次 status 都真正清扫；生产不设置。

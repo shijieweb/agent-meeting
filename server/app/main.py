@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
+from app.config import OFFLINE_WINDOW_SECONDS, LOST_TIMEOUT
 from app.routers import agents, messages
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -54,3 +55,13 @@ def index():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+def get_config():
+    """F-g.2 / Q5：透出前端离线着色窗口等配置（避免前端硬编码阈值，design §0.7/§5.4）。"""
+    return {
+        "offline_window": OFFLINE_WINDOW_SECONDS,   # session=1 时离线判定窗口（7200s）
+        "online_window": LOST_TIMEOUT,              # 非 session 在线窗口（1200s）
+        "lost_timeout": LOST_TIMEOUT,               # 失联阈值（1200s）
+    }
