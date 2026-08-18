@@ -7,6 +7,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 用于隔离自测（如 8011 实例指向独立 data 目录，避免污染生产 8000）。
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
 
+# ---- 二期 v6：SQLite 存储层（仅新增，不修改任何既有常量）----
+DB_FILENAME = "agent_meeting.db"   # 单文件库，落 DATA_DIR；gitignored；零运维、不引入外部服务
+
 # Agent 建议轮询间隔（秒），仅作提示，前端/agent 自行实现
 POLL_INTERVAL = 3
 

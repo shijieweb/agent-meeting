@@ -1,6 +1,11 @@
 # 运行时数据（JSON 持久化文件，由服务自动生成）
 data/
 
+# 二期 v6：SQLite 存储层运行期产物（单文件库 / 备份目录 / 测试库）
+agent_meeting.db*
+backup_*/
+tests_storage_v6/*.db*
+
 # Python 缓存
 __pycache__/
 *.pyc
