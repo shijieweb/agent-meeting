@@ -20,6 +20,7 @@
 大脑恒为本人，绝无后台自循环、绝无 MiniMax/OpenAI 自动大脑。
 """
 import argparse
+import itertools
 import json
 import os
 import sys
@@ -48,6 +49,13 @@ DATA_DIR = os.environ.get("AGENT_HUB_DATA_DIR", _BUILTIN_DATA_DIR)
 if not os.path.isdir(DATA_DIR):
     DATA_DIR = os.path.join(os.path.expanduser("~"), ".agent_hub", "data")
 AGENT_NAME_FILE = os.path.join(DATA_DIR, "agent_name.txt")
+
+# F7：reply 序号（进程内单调递增）+ 微秒时间戳。
+# 注意：loop.py 以 CLI 每调用一进程，单纯 itertools.count 会每次从 1 重来，导致
+# 同一 msg_id 两次 reply（两个进程）生成相同 client_msg_id 被服务端幂等拦截（AC-7.1 不通过）。
+# 因此拼接微秒时间戳保证跨进程唯一；n 保留供同进程多次 do_reply 时递增可读。
+# _req 在函数入口序列化 body 一次，内部网络重试复用同一 client_msg_id（单次 do_reply 幂等不双落）。
+_reply_seq = itertools.count(1)
 
 
 def _req(method, path, body=None, query=None, timeout=15, max_retries=3):
@@ -204,11 +212,13 @@ def do_reply(name, msg_id, content=None, content_file=None):
         print("reply 需要 --msg 或 --file", file=sys.stderr)
         sys.exit(2)
     ensure_registered(name)
+    n = next(_reply_seq)                            # F7：进程内序号（可读递增）
+    client_msg_id = "c_{0}_{1}_{2}".format(msg_id or "", n, int(time.time() * 1000000))  # +微秒时间戳：跨进程唯一
     r = _req("POST", "/api/messages/reply", {
         "agent_name": name,
         "content": content,
         "reply_to_message_id": msg_id,
-        "client_msg_id": "c_" + (msg_id or ""),
+        "client_msg_id": client_msg_id,
     })
     print(json.dumps(r, ensure_ascii=False, indent=2))
     return r

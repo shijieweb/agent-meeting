@@ -107,34 +107,55 @@ def append_system_event(event: str, agent_name: str) -> dict:
 
 
 def send_user_message(content, target_type, target_agent_name=None, client_msg_id=None):
-    """前端发送用户消息：写消息 + 为目标 Agent 建未读回执。对应方案书 §5.3 send_user_message。"""
-    msgs = load_messages()
-    dup = _dup_by_client_msg_id(msgs, client_msg_id)
-    if dup:
-        return dup
+    """前端发送用户消息：写消息 + 为目标 Agent 建未读回执。对应方案书 §5.3 send_user_message。
 
-    msg = {
-        "id": gen_id("msg"),
-        "content": content,
-        "sender_type": "user",
-        "sender_agent_name": None,
-        "target_type": target_type,
-        "target_agent_name": target_agent_name if target_type == "single" else None,
-        "created_at": now_iso(),
-        "client_msg_id": client_msg_id,
-        "read_by": [],
-    }
-    msgs.append(msg)
-    save_messages(msgs)
+    F1 原子化（P0 并发不丢）：消息落库改 update_json_atomic 锁内 read-modify-write
+    （对齐 submit_reply 既有范式），消除并发写覆盖；幂等 _dup_by_client_msg_id 也在锁内执行。
+    顺序保证：消息先落库、reads 回执后补（回执失败不回滚消息，P0 核心=消息不丢）。
+    """
+    holder = {}
 
-    reads = load_reads()
-    if target_type == "single":
-        if target_agent_name:
-            reads.append({"message_id": msg["id"], "agent_name": target_agent_name, "read_at": None})
-    elif target_type == "all":
-        for a in load_agents():
-            reads.append({"message_id": msg["id"], "agent_name": a["name"], "read_at": None})
-    save_reads(reads)
+    def _mut(msgs):
+        # D-1 铁律：update_json_atomic 写回的是被原地修改的 msgs，必须原地 append，不能只返回新对象。
+        dup = _dup_by_client_msg_id(msgs, client_msg_id)
+        if dup:
+            holder["dup"] = True
+            holder["msg"] = dup
+            return None
+        msg = {
+            "id": gen_id("msg"),
+            "content": content,
+            "sender_type": "user",
+            "sender_agent_name": None,
+            "target_type": target_type,
+            "target_agent_name": target_agent_name if target_type == "single" else None,
+            "created_at": now_iso(),
+            "client_msg_id": client_msg_id,
+            "read_by": [],
+        }
+        msgs.append(msg)
+        holder["dup"] = False
+        holder["msg"] = msg
+        return None
+
+    update_json_atomic(MESSAGES_FILE, [], _mut)
+    if holder["dup"]:
+        return holder["msg"]
+
+    # reads.json 联动：消息先落库、回执后补；回执失败不回滚消息（已知坑 2 / P0 核心=消息不丢）。
+    msg = holder["msg"]
+
+    def _mut_reads(reads):
+        # D-1：原地 append，写回生效。
+        if target_type == "single":
+            if target_agent_name:
+                reads.append({"message_id": msg["id"], "agent_name": target_agent_name, "read_at": None})
+        elif target_type == "all":
+            for a in load_agents():   # R8：仅已注册 agent 建回执
+                reads.append({"message_id": msg["id"], "agent_name": a["name"], "read_at": None})
+        return None
+
+    update_json_atomic(READS_FILE, [], _mut_reads)
     return msg
 
 
@@ -162,24 +183,40 @@ def pull_messages(agent_name):
       满足 §7 T-PULL-05（并发拉取同一条消息只会被一个 Agent 领取）；
     - 同时更新 reads.json 回执的 read_at，供前端「✓已读 / N/N」展示。
     客户端只透传结果，不再做 seen.json 去重。
+
+    F4+F5（P1，design 1.4 二选一决策=首拉过滤 + 种子迁移锁内化合并）：
+    - 种子迁移（读已读回执 + 注册前 @all 历史 id）整体移入 update_json_atomic mutator 内，
+      消除原「锁外 exists 判断 + save_agent_read_set」的 TOCTOU 竞态（并发首拉不重复投递）；
+    - 首拉过滤：新 agent 注册前已存在的历史 @all 消息视为已读（created_at < registered_at），
+      不回灌给新 agent；registered_at 缺失（极端老数据）→ 不过滤，退化为现状（保守不误伤）。
     """
     msgs = load_messages()
-    # 迁移种子：若该 agent 的已读集合文件尚不存在（多为既有 agent 首次接入），
-    # 从 reads.json 取「该 agent 已读过的消息 id」作为初始集合，避免首次 pull 把历史消息全当未读回灌。
-    if not agent_read_set_exists(agent_name):
-        seed = {
-            r["message_id"]
-            for r in load_reads()
-            if r.get("agent_name") == agent_name and r.get("read_at") is not None
-        }
-        save_agent_read_set(agent_name, seed)
-
     read_holder = {}
 
     def _mut(read_set):
         # 注意：update_json_atomic 写入的是被原地修改的 read_set（见 storage.update_json_atomic），
-        # 因此这里必须在 read_set 上原地修改，不能只返回新对象。
+        # 因此这里必须在 read_set 上原地修改，不能只返回新对象（D-1 铁律）。
         s = set(read_set)
+        # F4+F5 合并：仅在「首次 pull（无已读集合文件）」时做种子迁移，且全部在锁内完成
+        if not agent_read_set_exists(agent_name):
+            reg_ts = None
+            for a in load_agents():            # 锁内读 agents.json（持全局 _lock，无竞态）
+                if a.get("name") == agent_name:
+                    reg_ts = a.get("registered_at")
+                    break
+            seed = {
+                r["message_id"]
+                for r in load_reads()           # 锁内读 reads.json：该 agent 已读回执 id
+                if r.get("agent_name") == agent_name and r.get("read_at") is not None
+            }
+            if reg_ts:                          # 首拉过滤：注册前 @all 历史一律视为已读（F4）
+                seed |= {
+                    m["id"] for m in msgs
+                    if m.get("sender_type") == "user"
+                    and m.get("target_type") == "all"
+                    and m.get("created_at") < reg_ts
+                }
+            s |= seed
         unread = []
         for msg in msgs:
             if msg["sender_type"] != "user":
@@ -257,6 +294,7 @@ def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=No
             "sender_agent_name": agent_name,
             "target_type": "user",
             "target_agent_name": None,
+            "reply_to_message_id": reply_to_message_id,   # F3：不再静默丢弃（缺省 None → JSON null，兼容旧调用）
             "created_at": now_iso(),
             "client_msg_id": client_msg_id,
             "read_by": [],

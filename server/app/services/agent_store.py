@@ -55,38 +55,53 @@ def save_agents(agents):
 def register_agent(name):
     """注册 Agent；名字规范化（strip）+ 同名唤醒语义。
 
+    F2 原子化（P0 并发不丢）：agents.json 改 update_json_atomic 锁内 read-modify-write
+    （锁内同名判定 / 唤醒重置 / 先清僵尸再追加），消除并发注册后写覆盖先写。
     返回 (agents, created, info)：
       - created=True：本次为新注册；
       - created=False：名字已存在；info["reactivated"]=True 表示失联/离线旧记录被唤醒重置，
         False 表示在线同名幂等（不动记录）。
     """
     name = (name or "").strip()
-    agents = load_agents()
-    for a in agents:
-        if a.get("name") == name:
-            state = derive_state(a)
-            if state == "online":
-                return agents, False, {"reactivated": False}   # 在线：幂等，不动
-            # 失联/离线（无论是否超保留期）→ 唤醒重置（老板拍板 §5.1-4）
-            ts = now_iso()
-            a["registered_at"] = ts
-            a["last_seen"] = ts
-            a["status"] = "waiting"
-            a["session"] = False
-            a["token_hash"] = None            # token 预留（可空，不实现校验）
-            save_agents(agents)
-            append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "reactivated"})
-            _emit_system_event("reactivated", name)   # 重注册唤醒 → 系统消息「X 重新上线了」（AC-4.3）
-            return agents, False, {"reactivated": True}
-    # 先清僵尸、再追加新 agent（防注册即删：新注册 last_seen==registered_at，
-    # 若保留历史僵尸不清理，_should_delete 的占位判定可能误伤——沿用原注释语义）
-    agents = [a for a in agents if not _should_delete(a)]
-    ts = now_iso()
-    agents.append({"name": name, "registered_at": ts, "last_seen": ts,
-                   "status": "waiting", "session": False, "token_hash": None})
-    save_agents(agents)
-    append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "registered"})
-    return agents, True, {"reactivated": False}
+    holder = {}
+
+    def _mut(agents):
+        # D-1 铁律：update_json_atomic 写回的是被原地修改的 agents，必须原地改，不能只返回新对象。
+        for a in agents:                       # ① 同名判定（锁内）
+            if a.get("name") == name:
+                state = derive_state(a)
+                if state == "online":
+                    holder.update(created=False, info={"reactivated": False})
+                    return None                # 在线幂等：不动记录（不写事件日志）
+                # ② 唤醒重置（失联/离线 → reactivated；老板拍板 §5.1-4）
+                ts = now_iso()
+                a["registered_at"] = ts        # F4 前提：唤醒即更新 registered_at（旧 @all 不回灌）
+                a["last_seen"] = ts
+                a["status"] = "waiting"
+                a["session"] = False
+                a["token_hash"] = None         # token 预留（可空，不实现校验）
+                holder.update(created=False, info={"reactivated": True}, ts=ts)
+                return None
+        # ③ 未找到：先清僵尸、再追加新 agent（防注册即删：新注册 last_seen==registered_at，
+        #    若保留历史僵尸不清理，_should_delete 的占位判定可能误伤——沿用原注释语义）
+        agents[:] = [a for a in agents if not _should_delete(a)]
+        ts = now_iso()
+        agents.append({"name": name, "registered_at": ts, "last_seen": ts,
+                       "status": "waiting", "session": False, "token_hash": None})
+        holder.update(created=True, info={"reactivated": False}, ts=ts)
+        return None
+
+    update_json_atomic(AGENTS_FILE, [], _mut)   # 锁内 read-modify-write，写回原地修改后的 agents
+
+    # 事件日志：状态写回成功后再记（与现状 save→append_jsonl 同序；append_jsonl 自身持锁）
+    ts = holder.get("ts") or now_iso()
+    if holder["created"]:
+        append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "registered"})
+    elif holder["info"]["reactivated"]:
+        append_jsonl(STATUS_EVENTS_LOG, {"ts": ts, "name": name, "event": "reactivated"})
+        _emit_system_event("reactivated", name)   # state-persist 保活：重注册唤醒 → 系统消息「X 重新上线了」
+    # 在线同名幂等：不写事件日志（原实现也不写）
+    return load_agents(), holder["created"], holder["info"]
 
 
 def agent_exists(name):

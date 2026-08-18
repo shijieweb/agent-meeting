@@ -43,6 +43,8 @@ def register(body: AgentRegister):
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=422, detail="agent name must not be blank")
+    if "/" in name:   # F6：禁含 '/'（修复 /{name}/session 路径 404；不调用 register_agent → 不入库）
+        raise HTTPException(status_code=422, detail="agent name must not contain '/'")
     agents, created, info = agent_store.register_agent(name)
     if created:
         return {"status": "ok", "message": "Agent registered successfully"}
