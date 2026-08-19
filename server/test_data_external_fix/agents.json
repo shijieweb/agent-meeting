@@ -1,0 +1,346 @@
+[
+  {
+    "name": "[TEST-DATA] 中文名",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] abc_123",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] with-dash",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag0",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:14",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag2",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag1",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag3",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag4",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag5",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag6",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag7",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag8",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag9",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag10",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag11",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag12",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag13",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag15",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag14",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag16",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag17",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag18",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag20",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag19",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag22",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag21",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag23",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag24",
+    "registered_at": "2026-08-18T13:23:08",
+    "last_seen": "2026-08-18T13:23:08",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag25",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag26",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag27",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag29",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] ag28",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] same",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] brand_new_for_structure",
+    "registered_at": "2026-08-18T13:23:09",
+    "last_seen": "2026-08-18T13:23:09",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] New1",
+    "registered_at": "2026-08-18T13:23:10",
+    "last_seen": "2026-08-18T13:23:10",
+    "status": "working",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] Old1",
+    "registered_at": "2026-08-18T13:23:11",
+    "last_seen": "2026-08-18T13:23:11",
+    "status": "working",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] New2",
+    "registered_at": "2026-08-18T13:23:12",
+    "last_seen": "2026-08-18T13:23:13",
+    "status": "working",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] New3",
+    "registered_at": "2026-08-18T13:23:12",
+    "last_seen": "2026-08-18T13:23:12",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] New4",
+    "registered_at": "2026-08-18T13:23:12",
+    "last_seen": "2026-08-18T13:23:13",
+    "status": "working",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] Race1",
+    "registered_at": "2026-08-18T13:23:14",
+    "last_seen": "2026-08-18T13:23:14",
+    "status": "working",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] bot",
+    "registered_at": "2026-08-18T13:23:22",
+    "last_seen": "2026-08-18T13:23:23",
+    "status": "waiting",
+    "session": true,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] Wake1",
+    "registered_at": "2026-08-18T13:26:15",
+    "last_seen": "2026-08-18T13:26:15",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  }
+]

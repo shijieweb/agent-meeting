@@ -1,0 +1,1 @@
+{"status": 200, "body": {"id": "doc_6d7bcd89d5", "name": "t.txt", "owner": "user", "owner_type": "user", "mime": "text/plain", "size": 4, "created_at": "2026-08-19T13:20:20", "updated_at": "2026-08-19T13:20:20", "url": "http://agnes.owen1.de5.net/meeting/api/docs/doc_6d7bcd89d5/download", "editable": true}}

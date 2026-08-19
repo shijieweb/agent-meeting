@@ -115,14 +115,14 @@ async def doc_upload(
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=DocMeta)
-def doc_create(body: DocCreate):
-    actor = derive_actor(body.__dict__, agent_name=None)
+def doc_create(body: DocCreate, agent_name: Optional[str] = Query(None)):
+    actor = derive_actor(body.__dict__, agent_name)
 
-    # AC-17/19：sender_type/owner/owner_type 拒请求体传入
-    if "sender_type" in body.__dict__ or "owner" in body.__dict__ or "owner_type" in body.__dict__:
+    # Agent 不能新建文档（仅网页端，AC-12）
+    if actor["sender_type"] == "agent":
         raise HTTPException(
-            status_code=400,
-            detail="sender_type/owner/owner_type are server-derived; do not send",
+            status_code=403,
+            detail="agent cannot create docs; use upload endpoint to overwrite existing",
         )
 
     result = create_empty(body.name, actor, content=body.content or "")
@@ -199,15 +199,8 @@ def doc_download(doc_id: str):
 # ---------------------------------------------------------------------------
 
 @router.put("/{doc_id}", response_model=DocMeta)
-def doc_edit(doc_id: str, body: DocEdit):
-    actor = derive_actor(body.__dict__, agent_name=None)
-
-    # AC-17/19：拒伪造
-    if "sender_type" in body.__dict__ or "owner" in body.__dict__ or "owner_type" in body.__dict__:
-        raise HTTPException(
-            status_code=400,
-            detail="sender_type/owner/owner_type are server-derived; do not send",
-        )
+def doc_edit(doc_id: str, body: DocEdit, agent_name: Optional[str] = Query(None)):
+    actor = derive_actor(body.__dict__, agent_name)
 
     if body.content is None and body.name is None:
         raise HTTPException(status_code=400, detail="provide content or name")

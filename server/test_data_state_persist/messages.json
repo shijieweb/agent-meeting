@@ -1,0 +1,72 @@
+[
+  {
+    "id": "msg_3f8eb4d129",
+    "content": "[TEST-DATA] Bob 上线了",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Bob",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:48:31",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "init"
+  },
+  {
+    "id": "msg_e7b5d77775",
+    "content": "[TEST-DATA] e2e hello",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "all",
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:48:34",
+    "client_msg_id": "usr_59794ed3-c3d2-441b-ad98-eb2dfaac8c4b",
+    "read_by": []
+  },
+  {
+    "id": "msg_f1ce477514",
+    "content": "[TEST-DATA] fail-me",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "single",
+    "target_agent_name": "[TEST-DATA] Ghost",
+    "created_at": "2026-08-18T12:48:43",
+    "client_msg_id": "usr_19a4c5c0-c296-4147-a359-afd31866c9cc",
+    "read_by": []
+  },
+  {
+    "id": "msg_8ed61bb538",
+    "content": "[TEST-DATA] same",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "all",
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:48:47",
+    "client_msg_id": "usr_a146448c-5166-4533-bee5-3afecb6caaa7",
+    "read_by": []
+  },
+  {
+    "id": "msg_296c42250f",
+    "content": "[TEST-DATA] same",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "all",
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:48:47",
+    "client_msg_id": "usr_21f221c2-526c-4161-b13f-d5e875c95609",
+    "read_by": []
+  },
+  {
+    "id": "msg_6a83c6655c",
+    "content": "[TEST-DATA] Dave 上线了",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Dave",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:48:50",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "init"
+  }
+]

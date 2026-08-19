@@ -1,0 +1,198 @@
+============================================================
+T-agent-meeting-upload Self-Test (AC-1~22)
+DATA_DIR: C:\Users\67972\WorkBuddy\workbuddy\agent-meeting\server\data_test_8011
+============================================================
+
+-- AC-13.1: Migration --
+  [PASS] documents table exists
+  [PASS] document_changes table exists
+  All tables: ['agent_read', 'agent_read_init', 'agents', 'document_changes', 'documents', 'messages', 'reads']
+  [PASS] owner_type column in documents
+  documents columns: ['id', 'name', 'file_uuid', 'owner', 'owner_type', 'mime', 'size', 'created_at', 'updated_at']
+  [PASS] messages table unchanged (no attachments)
+
+-- AC-2: Upload --
+  [PASS] AC-2.1: upload returns 200: 200
+  [PASS] AC-2.1: response has id/name/url/size: dict_keys(['id', 'name', 'owner', 'owner_type', 'mime', 'size', 'created_at', 'updated_at', 'url', 'editable', 'action'])
+  [PASS] AC-2.1: owner=user (HUMAN_OWNER)
+  [PASS] AC-2.1: owner_type=user
+  [PASS] AC-2.1: mime=text/markdown
+  [PASS] AC-2.2: file on disk
+  [PASS] AC-2.2: file size correct
+  [PASS] AC-3.1: documents DB row correct: <sqlite3.Row object at 0x000001E0AFEFE860>
+  [PASS] AC-3.2: DB no file content (no BLOB col)
+  [PASS] AC-2.3: >5MB returns 413: 413
+  [PASS] AC-2.4: SVG blocked (400): 400
+  [PASS] AC-2.5: empty file blocked (400): 400
+
+-- AC-4: System message --
+  [PASS] AC-4.1: doc_event message exists: count=1
+  [PASS] AC-4.1: content has [name](url) Markdown link
+  [PASS] AC-4.1: sender_type=system
+  [PASS] AC-4.1: message_type=doc_event
+
+-- AC-5: Overwrite --
+  [PASS] AC-5.1: overwrite returns 200: 200
+  [PASS] AC-5.1: action=overwrite
+  [PASS] AC-5.1: disk file updated
+  [PASS] AC-5.2: document_changes has overwrite: ['upload', 'overwrite']
+  [PASS] AC-5.3: overwrite generates system notification
+
+-- AC-6: Owner --
+  [PASS] AC-6.1: owner=user
+  [PASS] AC-6.1: owner_type=user
+
+-- AC-7: Change log --
+  [PASS] AC-7.2: GET /changes returns 200: 200
+  [PASS] AC-7.2: changes list not empty
+  [PASS] AC-7.1: change has actor/action/summary/created_at
+  [PASS] AC-7.1: actor is server-derived (not from request body)
+
+-- AC-9: View / download --
+  [PASS] AC-9.1: GET /docs returns 200
+  [PASS] AC-9.1: response has docs/total/limit/offset
+  [PASS] AC-9.1: total >= 1
+  [PASS] AC-9.2: GET detail returns 200
+  [PASS] AC-9.2: detail has url
+  [PASS] AC-9.2: url contains EXTERNAL_BASE_URL
+  [PASS] AC-9.2: detail has changes array
+  [PASS] AC-9.2: detail has editable field
+  [PASS] AC-9.3: download returns 200
+  [PASS] AC-9.3: Content-Type is text/markdown
+  [PASS] AC-9.3: Content-Disposition has filename
+  [PASS] AC-9.3: content matches updated file
+
+-- AC-10: Delete --
+  [PASS] AC-10.1: DELETE returns 200
+  [PASS] AC-10.1: file removed from disk
+  [PASS] AC-10.1: delete change recorded: {'action': 'delete'}
+
+-- AC-11: External URL --
+  [PASS] AC-11.1: url = EXTERNAL_BASE_URL + /api/docs/<id>/download
+
+-- AC-12: Agent restrictions --
+  [PASS] AC-12.2: Agent upload without doc_id = 403: 403
+
+-- AC-17/19: Identity derivation --
+  [PASS] AC-17.1: sender_type/owner/owner_type in body rejected (422 or 400): 422
+  [PASS] AC-17.3: unknown agent_name = 403: 403
+
+-- AC-18: Path traversal --
+  [PASS] AC-18: valid file_uuid download 200: 200
+  [PASS] AC-18: content correct
+  [PASS] AC-18.1: tampered file_uuid (non-hex) → 403: 403
+
+-- AC-20: PUT edit --
+  [PASS] AC-20: POST /api/docs (create empty) returns 200: 200
+  [PASS] AC-20.1: PUT returns 200: 200
+  [PASS] AC-20.1: disk content updated: b'# Edited\n\nNew content here.'
+  [PASS] AC-20.1: edit change recorded: <sqlite3.Row object at 0x000001E0B00B6B60>
+  [PASS] AC-7.2: summary auto-generated (not from client): <sqlite3.Row object at 0x000001E0B00B6950>
+
+-- AC-21: Pagination --
+  [PASS] AC-21.1: response has total/limit/offset
+  [PASS] AC-21.1: total >= 25
+  [PASS] AC-21.1: docs <= limit (10)
+  [PASS] AC-21.1: sorted updated_at desc: ['2026-08-19T13:27:27', '2026-08-19T13:27:27', '2026-08-19T13:27:27']
+
+-- AC-22: owner_type --
+  [PASS] AC-22: Agent cannot overwrite human's doc = 403: 403
+  [PASS] AC-22: Agent cannot delete human's doc = 403: 403
+  [PASS] AC-22: owner_type column present in schema
+
+-- AC-15: loop.py commands --
+  [PASS] AC-15: loop.py has do_upload function
+  [PASS] AC-15: loop.py has do_delete_doc function
+  [PASS] AC-15: loop.py has upload in choices
+  [PASS] AC-15: loop.py has delete-doc in choices
+
+-- AC-16: MD rendering (frontend) --
+  [PASS] AC-16: marked.min.js in vendor/
+  [PASS] AC-16: highlight.min.js in vendor/
+
+-- AC-1: Frontend dropdown --
+  [PASS] AC-1.1: index.html has panel-menu DOM
+  [PASS] AC-1.1: index.html has menu-agent-mgmt
+  [PASS] AC-1.1: index.html has menu-doc-mgmt
+  [PASS] AC-1.1: index.html has doc-panel DOM
+
+============================================================
+RESULTS
+============================================================
+Passed: 75/75
+  PASS  AC-1.1: index.html has doc-panel DOM
+  PASS  AC-1.1: index.html has menu-agent-mgmt
+  PASS  AC-1.1: index.html has menu-doc-mgmt
+  PASS  AC-1.1: index.html has panel-menu DOM
+  PASS  AC-10.1: DELETE returns 200
+  PASS  AC-10.1: delete change recorded
+  PASS  AC-10.1: file removed from disk
+  PASS  AC-11.1: url = EXTERNAL_BASE_URL + /api/docs/<id>/download
+  PASS  AC-12.2: Agent upload without doc_id = 403
+  PASS  AC-15: loop.py has delete-doc in choices
+  PASS  AC-15: loop.py has do_delete_doc function
+  PASS  AC-15: loop.py has do_upload function
+  PASS  AC-15: loop.py has upload in choices
+  PASS  AC-16: highlight.min.js in vendor/
+  PASS  AC-16: marked.min.js in vendor/
+  PASS  AC-17.1: sender_type/owner/owner_type in body rejected (422 or 400)
+  PASS  AC-17.3: unknown agent_name = 403
+  PASS  AC-18.1: tampered file_uuid (non-hex) → 403
+  PASS  AC-18: content correct
+  PASS  AC-18: valid file_uuid download 200
+  PASS  AC-2.1: mime=text/markdown
+  PASS  AC-2.1: owner=user (HUMAN_OWNER)
+  PASS  AC-2.1: owner_type=user
+  PASS  AC-2.1: response has id/name/url/size
+  PASS  AC-2.1: upload returns 200
+  PASS  AC-2.2: file on disk
+  PASS  AC-2.2: file size correct
+  PASS  AC-2.3: >5MB returns 413
+  PASS  AC-2.4: SVG blocked (400)
+  PASS  AC-2.5: empty file blocked (400)
+  PASS  AC-20.1: PUT returns 200
+  PASS  AC-20.1: disk content updated
+  PASS  AC-20.1: edit change recorded
+  PASS  AC-20: POST /api/docs (create empty) returns 200
+  PASS  AC-21.1: docs <= limit (10)
+  PASS  AC-21.1: response has total/limit/offset
+  PASS  AC-21.1: sorted updated_at desc
+  PASS  AC-21.1: total >= 25
+  PASS  AC-22: Agent cannot delete human's doc = 403
+  PASS  AC-22: Agent cannot overwrite human's doc = 403
+  PASS  AC-22: owner_type column present in schema
+  PASS  AC-3.1: documents DB row correct
+  PASS  AC-3.2: DB no file content (no BLOB col)
+  PASS  AC-4.1: content has [name](url) Markdown link
+  PASS  AC-4.1: doc_event message exists
+  PASS  AC-4.1: message_type=doc_event
+  PASS  AC-4.1: sender_type=system
+  PASS  AC-5.1: action=overwrite
+  PASS  AC-5.1: disk file updated
+  PASS  AC-5.1: overwrite returns 200
+  PASS  AC-5.2: document_changes has overwrite
+  PASS  AC-5.3: overwrite generates system notification
+  PASS  AC-6.1: owner=user
+  PASS  AC-6.1: owner_type=user
+  PASS  AC-7.1: actor is server-derived (not from request body)
+  PASS  AC-7.1: change has actor/action/summary/created_at
+  PASS  AC-7.2: GET /changes returns 200
+  PASS  AC-7.2: changes list not empty
+  PASS  AC-7.2: summary auto-generated (not from client)
+  PASS  AC-9.1: GET /docs returns 200
+  PASS  AC-9.1: response has docs/total/limit/offset
+  PASS  AC-9.1: total >= 1
+  PASS  AC-9.2: GET detail returns 200
+  PASS  AC-9.2: detail has changes array
+  PASS  AC-9.2: detail has editable field
+  PASS  AC-9.2: detail has url
+  PASS  AC-9.2: url contains EXTERNAL_BASE_URL
+  PASS  AC-9.3: Content-Disposition has filename
+  PASS  AC-9.3: Content-Type is text/markdown
+  PASS  AC-9.3: content matches updated file
+  PASS  AC-9.3: download returns 200
+  PASS  document_changes table exists
+  PASS  documents table exists
+  PASS  messages table unchanged (no attachments)
+  PASS  owner_type column in documents
+============================================================

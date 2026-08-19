@@ -59,8 +59,12 @@ class AgentManageUpdate(BaseModel):
 # 由路由层 derive_actor() 检出被禁字段后返回 400（而非被 pydantic 静默丢弃）。
 
 class DocCreate(BaseModel):
-    """POST /api/docs：新建空文档（仅网页端，Agent 调用 → 403）。"""
-    model_config = ConfigDict(extra="allow")
+    """POST /api/docs：新建空文档（仅网页端，Agent 调用 → 403）。
+    
+    extra="forbid"：禁止请求体携带 sender_type/owner/owner_type，
+    由 derive_actor 路由推导（AC-17/19）。
+    """
+    model_config = ConfigDict(extra="forbid")
     name: str = Field(..., min_length=1, max_length=300)
     content: Optional[str] = ""
 

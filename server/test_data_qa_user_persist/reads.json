@@ -1,0 +1,32 @@
+[
+  {
+    "message_id": "msg_4113fba204",
+    "agent_name": "[TEST-DATA] Bob",
+    "read_at": "2026-08-18T12:58:58"
+  },
+  {
+    "message_id": "msg_a82933a3d0",
+    "agent_name": "[TEST-DATA] Ghost",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b6204e26b1",
+    "agent_name": "[TEST-DATA] Bob",
+    "read_at": "2026-08-18T12:58:58"
+  },
+  {
+    "message_id": "msg_b6204e26b1",
+    "agent_name": "[TEST-DATA] Ghost",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_b79d7861ac",
+    "agent_name": "[TEST-DATA] Bob",
+    "read_at": "2026-08-18T12:58:58"
+  },
+  {
+    "message_id": "msg_b79d7861ac",
+    "agent_name": "[TEST-DATA] Ghost",
+    "read_at": null
+  }
+]

@@ -1,0 +1,32 @@
+[
+  {
+    "message_id": "msg_e7b5d77775",
+    "agent_name": "[TEST-DATA] Bob",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_f1ce477514",
+    "agent_name": "[TEST-DATA] Ghost",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_8ed61bb538",
+    "agent_name": "[TEST-DATA] Bob",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_8ed61bb538",
+    "agent_name": "[TEST-DATA] Ghost",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_296c42250f",
+    "agent_name": "[TEST-DATA] Bob",
+    "read_at": null
+  },
+  {
+    "message_id": "msg_296c42250f",
+    "agent_name": "[TEST-DATA] Ghost",
+    "read_at": null
+  }
+]

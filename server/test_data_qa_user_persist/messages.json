@@ -1,0 +1,111 @@
+[
+  {
+    "id": "msg_4113fba204",
+    "content": "[TEST-DATA] qa hello",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "all",
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:15",
+    "client_msg_id": "usr_58651dd4-791e-4e9e-8856-7b2aee3b1c6f",
+    "read_by": []
+  },
+  {
+    "id": "msg_a82933a3d0",
+    "content": "[TEST-DATA] fail-me",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "single",
+    "target_agent_name": "[TEST-DATA] Ghost",
+    "created_at": "2026-08-18T12:58:29",
+    "client_msg_id": "usr_054ff23e-a97f-4415-bab8-dd2e0dad613c",
+    "read_by": []
+  },
+  {
+    "id": "msg_b6204e26b1",
+    "content": "[TEST-DATA] same",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "all",
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:35",
+    "client_msg_id": "usr_ed721c75-5a2c-43af-9d78-828342c9bf9b",
+    "read_by": []
+  },
+  {
+    "id": "msg_b79d7861ac",
+    "content": "[TEST-DATA] same",
+    "sender_type": "user",
+    "sender_agent_name": null,
+    "target_type": "all",
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:35",
+    "client_msg_id": "usr_42ad9c65-ceb1-4907-a5bf-dcd9ef3d1941",
+    "read_by": []
+  },
+  {
+    "id": "msg_91984e1a7e",
+    "content": "[TEST-DATA] Bob 上线了",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Bob",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:39",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "init"
+  },
+  {
+    "id": "msg_854efbaaf7",
+    "content": "[TEST-DATA] Bob 下线了",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Bob",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:45",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "end"
+  },
+  {
+    "id": "msg_215f3c69dd",
+    "content": "[TEST-DATA] Bob 上线了",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Bob",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:51",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "init"
+  },
+  {
+    "id": "msg_f5a51a1e66",
+    "content": "[TEST-DATA] Bob 已离线（失联超时）",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Bob",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:51",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "lost"
+  },
+  {
+    "id": "msg_af29b67a63",
+    "content": "[TEST-DATA] Bob 重新上线了",
+    "sender_type": "system",
+    "sender_agent_name": "[TEST-DATA] Bob",
+    "target_type": null,
+    "target_agent_name": null,
+    "created_at": "2026-08-18T12:58:53",
+    "client_msg_id": null,
+    "read_by": [],
+    "message_type": "presence_event",
+    "event": "reactivated"
+  }
+]

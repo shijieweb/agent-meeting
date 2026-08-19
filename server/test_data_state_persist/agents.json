@@ -1,0 +1,26 @@
+[
+  {
+    "name": "[TEST-DATA] Bob",
+    "registered_at": "2026-08-18T12:48:31",
+    "last_seen": "2026-08-18T12:48:31",
+    "status": "working",
+    "session": true,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] Ghost",
+    "registered_at": "2026-08-18T12:48:42",
+    "last_seen": "2026-08-18T12:48:42",
+    "status": "waiting",
+    "session": false,
+    "token_hash": null
+  },
+  {
+    "name": "[TEST-DATA] Dave",
+    "registered_at": "2026-08-18T12:48:50",
+    "last_seen": "2026-08-18T12:48:50",
+    "status": "working",
+    "session": true,
+    "token_hash": null
+  }
+]

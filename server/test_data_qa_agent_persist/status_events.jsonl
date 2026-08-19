@@ -1,0 +1,8 @@
+{"ts": "2026-08-18T12:53:41", "name": "[TEST-DATA] QA-Alice", "event": "registered"}
+{"ts": "2026-08-18T12:53:46", "name": "[TEST-DATA] QA-Alice", "event": "session_on"}
+{"ts": "2026-08-18T12:54:05", "name": "[TEST-DATA] QA-Alice", "event": "session_off"}
+{"ts": "2026-08-18T12:54:11", "name": "[TEST-DATA] QA-Alice", "event": "session_on"}
+{"ts": "2026-08-18T12:54:17", "name": "[TEST-DATA] QA-Alice", "event": "lost"}
+{"ts": "2026-08-18T12:54:29", "name": "[TEST-DATA] QA-Alice", "event": "reactivated"}
+{"ts": "2026-08-18T12:55:23", "name": "[TEST-DATA] QA-Alice", "event": "session_on"}
+{"ts": "2026-08-18T12:55:31", "name": "[TEST-DATA] QA-Alice", "event": "session_off"}

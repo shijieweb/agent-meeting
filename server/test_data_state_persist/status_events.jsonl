@@ -1,0 +1,5 @@
+{"ts": "2026-08-18T12:48:31", "name": "[TEST-DATA] Bob", "event": "registered"}
+{"ts": "2026-08-18T12:48:31", "name": "[TEST-DATA] Bob", "event": "session_on"}
+{"ts": "2026-08-18T12:48:42", "name": "[TEST-DATA] Ghost", "event": "registered"}
+{"ts": "2026-08-18T12:48:50", "name": "[TEST-DATA] Dave", "event": "registered"}
+{"ts": "2026-08-18T12:48:50", "name": "[TEST-DATA] Dave", "event": "session_on"}

@@ -1,0 +1,9 @@
+{"ts": "2026-08-18T05:50:04", "name": "WorkBuddy", "action": "deleted", "reason": "offline/lost beyond retention (LOST_TIMEOUT+6h, 22800s)"}
+{"ts": "2026-08-18T06:26:05", "name": "xiaobian", "action": "deleted", "reason": "offline/lost beyond retention (LOST_TIMEOUT+6h, 22800s)"}
+{"ts": "2026-08-18T11:05:05", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
+{"ts": "2026-08-18T12:45:05", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
+{"ts": "2026-08-18T13:25:05", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
+{"ts": "2026-08-18T13:56:05", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
+{"ts": "2026-08-18T14:18:09", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
+{"ts": "2026-08-18T16:14:05", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
+{"ts": "2026-08-18T17:50:05", "name": "xiaobian", "action": "lost_to_offline", "reason": "no heartbeat > LOST_TIMEOUT (1200s)"}
