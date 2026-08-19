@@ -18,7 +18,7 @@
 import os
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import DOC_LIST_DEFAULT_LIMIT, DOC_LIST_MAX_LIMIT, EXTERNAL_BASE_URL
@@ -80,13 +80,21 @@ def _meta(doc: dict) -> DocMeta:
 @router.post("/upload", response_model=DocUploadResponse)
 async def doc_upload(
     file: UploadFile = File(...),
+    request: Request = None,
     agent_name: Optional[str] = Form(None, description="Agent 名字（路由推导 owner_type=agent）"),
     doc_id: Optional[str] = Form(None, description="文档 id（带此参数=覆盖已有文档，不带=新建）"),
 ):
-    actor = derive_actor({}, agent_name)
+    # AC-17：multipart form 中的 forbidden 字段不走 Pydantic extra="forbid"，需显式检查
+    if request is not None:
+        form = await request.form()
+        forbidden = [k for k in ("sender_type", "owner", "owner_type") if k in form]
+        if forbidden:
+            raise HTTPException(
+                status_code=400,
+                detail="sender_type/owner/owner_type are server-derived; do not send",
+            )
 
-    # AC-17/19/22：body（表单字段）禁止传 sender_type/owner/owner_type
-    # derive_actor 已做检查
+    actor = derive_actor({}, agent_name)
 
     # Agent 不能新建（不带 doc_id → 403）
     if actor["sender_type"] == "agent" and doc_id is None:
