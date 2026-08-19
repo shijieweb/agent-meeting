@@ -262,11 +262,13 @@ function paintReadStatus(msg, statusEl) {
 // 单条消息渲染节点：头像 + 内容列（名字 + 气泡）行布局（Telegram 风换皮）。
 // 返回 [row, status?]，与旧 [bubble, status?] 结构一致，appendMessage/prependMessage 无需改。
 function buildMessageNodes(msg) {
-  // 系统消息（presence_event）：灰色居中提示（.sys-notice，复用现有样式），不走 msg-row 布局（AC-3.4/4.1/4.2）
+  // 系统消息（presence_event / doc_event）：灰色居中提示（.sys-notice）。
+  // AC-4.1/修 M6：doc_event 走 renderSystemContent 渲染 [text](url) 链接；
+  // presence_event（init/end/lost 等）直接 textContent，无链接不触发。
   if (msg.sender_type === 'system') {
     const notice = document.createElement('div');
     notice.className = 'sys-notice';
-    notice.textContent = msg.content || '';
+    notice.innerHTML = renderSystemContent(msg);
     notice.dataset.id = msg.id;
     return [notice];
   }
@@ -879,4 +881,470 @@ runWhenReady(function () {
     });
   }
   init();
+  setupDocPanel();   // 文档管理面板（design v2.5 §六 / AC-1~22）
 });
+
+/* ================================================================
+   renderSystemContent（design v2.5 §六 / AC-4 / 修 M6）
+   将 [text](url) Markdown 链接渲染为 <a>，仅 doc_event 类型走链接渲染；
+   presence 类（init/end/lost/reactivated）无害，直接 textContent。
+   URL 白名单：http(s):// 开头，否则当纯文本，防 javascript: XSS。
+   ================================================================ */
+function renderSystemContent(msg) {
+  // presence 类（无 message_type 或非 doc_event）：纯文本
+  if (!msg || msg.message_type !== 'doc_event') {
+    return escapeHtml(msg && msg.content ? msg.content : '');
+  }
+  const content = msg.content || '';
+  // 匹配 [text](url) 链接
+  return escapeHtml(content).replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+}
+
+/* ================================================================
+   ☰ 下拉菜单 + 文档管理面板（design v2.5 §六 / AC-1~22）
+   ================================================================ */
+function setupPanelMenu() {
+  const toggle = document.getElementById('panel-toggle');
+  const menu = document.getElementById('panel-menu');
+  const agentPanel = document.getElementById('agent-panel');
+  const docPanel = document.getElementById('doc-panel');
+  if (!toggle || !menu) return;
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden');
+    if (!isHidden) return;
+    // 关闭其他面板
+    agentPanel.classList.add('hidden');
+    docPanel.classList.add('hidden');
+  });
+
+  // 点击其他区域关闭菜单
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+      menu.classList.add('hidden');
+    }
+  });
+
+  // Agent 管理 → 显示已有 agent-panel
+  const menuAgent = document.getElementById('menu-agent-mgmt');
+  if (menuAgent) {
+    menuAgent.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      agentPanel.classList.remove('hidden');
+      loadPanelAgents();
+    });
+  }
+
+  // 文档管理 → 显示 doc-panel
+  const menuDoc = document.getElementById('menu-doc-mgmt');
+  if (menuDoc) {
+    menuDoc.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      docPanel.classList.remove('hidden');
+      loadDocList();
+    });
+  }
+
+  // agent-panel 关闭按钮
+  const agentClose = document.getElementById('panel-close');
+  if (agentClose) {
+    agentClose.addEventListener('click', () => agentPanel.classList.add('hidden'));
+  }
+
+  // doc-panel 关闭按钮
+  const docClose = document.getElementById('doc-panel-close');
+  if (docClose) {
+    docClose.addEventListener('click', () => docPanel.classList.add('hidden'));
+  }
+}
+
+// 当前选中文档 id（用于编辑/保存）
+let _currentDocId = null;
+// 当前文档是否为纯文本（可编辑）
+let _currentDocEditable = false;
+// 原始文档内容（用于取消）
+let _origDocContent = '';
+
+// ---- 文件图标映射 ----
+const _MIME_ICONS = {
+  'text/plain': '📄',
+  'text/markdown': '📝',
+  'application/json': '{ }',
+  'text/csv': '📊',
+  'application/pdf': '📕',
+  'image/png': '🖼',
+  'image/jpeg': '🖼',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📃',
+};
+
+function _docIcon(mime) {
+  return _MIME_ICONS[mime] || '📎';
+}
+
+function _fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function _fmtTime(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso.replace(' ', 'T')).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', month: '2-digit', day: '2-digit' });
+  } catch (e) { return iso; }
+}
+
+// ---- 文档列表渲染 ----
+async function loadDocList() {
+  const list = document.getElementById('doc-list');
+  const searchInput = document.getElementById('doc-search-input');
+  if (!list) return;
+  const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  list.innerHTML = '<div style="text-align:center;color:#bbb;font-size:12px;padding:12px">加载中…</div>';
+  try {
+    const res = await fetch(API_BASE + 'api/docs?limit=200');
+    const data = await res.json();
+    const docs = (data.docs || []).filter(d => !q || d.name.toLowerCase().includes(q));
+    if (docs.length === 0) {
+      list.innerHTML = '<div style="text-align:center;color:#bbb;font-size:12px;padding:12px">暂无文档</div>';
+      return;
+    }
+    list.innerHTML = '';
+    docs.forEach(doc => {
+      const item = document.createElement('div');
+      item.className = 'doc-item' + (_currentDocId === doc.id ? ' selected' : '');
+      item.dataset.id = doc.id;
+      item.innerHTML =
+        '<span class="doc-item-icon">' + _docIcon(doc.mime) + '</span>' +
+        '<div class="doc-item-info">' +
+          '<div class="doc-item-name" title="' + escapeHtml(doc.name) + '">' + escapeHtml(doc.name) + '</div>' +
+          '<div class="doc-item-meta">' +
+            '<span class="doc-owner-badge ' + escapeHtml(doc.owner_type) + '">' + escapeHtml(doc.owner_type === 'agent' ? 'agent' : 'user') + '</span> ' +
+            escapeHtml(doc.owner) + ' · ' + _fmtSize(doc.size) + ' · ' + _fmtTime(doc.updated_at) +
+          '</div>' +
+        '</div>' +
+        '<div class="doc-item-actions">' +
+          (doc.editable
+            ? '<button class="doc-btn btn-edit">编辑</button>'
+            : '<button class="doc-btn btn-down">下载</button>') +
+        '</div>';
+      // 点击行：选中并加载详情
+      item.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        openDoc(doc.id, doc.editable);
+      });
+      // 下载按钮
+      const downBtn = item.querySelector('.btn-down');
+      if (downBtn) {
+        downBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.open(doc.url, '_blank');
+        });
+      }
+      // 编辑按钮
+      const editBtn = item.querySelector('.btn-edit');
+      if (editBtn) {
+        editBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openDoc(doc.id, true);
+        });
+      }
+      list.appendChild(item);
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="text-align:center;color:#e5484d;font-size:12px;padding:12px">加载失败</div>';
+  }
+}
+
+function _setDocEditorVisible(visible) {
+  const area = document.getElementById('doc-editor-area');
+  if (!area) return;
+  if (visible) {
+    area.classList.remove('hidden');
+  } else {
+    area.classList.add('hidden');
+    _currentDocId = null;
+  }
+}
+
+function _showDocError(msg) {
+  const status = document.getElementById('doc-upload-status');
+  if (status) {
+    status.textContent = msg;
+    status.className = 'doc-upload-status err';
+    setTimeout(() => {
+      if (status) { status.textContent = ''; status.className = 'doc-upload-status'; }
+    }, 4000);
+  }
+}
+
+function _showDocOk(msg) {
+  const status = document.getElementById('doc-upload-status');
+  if (status) {
+    status.textContent = msg;
+    status.className = 'doc-upload-status ok';
+    setTimeout(() => {
+      if (status) { status.textContent = ''; status.className = 'doc-upload-status'; }
+    }, 3000);
+  }
+}
+
+async function openDoc(docId, editable) {
+  _currentDocId = docId;
+  _currentDocEditable = editable;
+  const area = document.getElementById('doc-editor-area');
+  if (!area) return;
+
+  // 更新选中高亮
+  document.querySelectorAll('.doc-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === docId);
+  });
+
+  const nameEl = document.getElementById('doc-editor-name');
+  const textEl = document.getElementById('doc-editor-text');
+  const previewEl = document.getElementById('doc-editor-preview');
+  const tabEdit = document.getElementById('doc-tab-edit');
+  const tabPreview = document.getElementById('doc-tab-preview');
+  const changeLog = document.getElementById('doc-change-log');
+
+  try {
+    const res = await fetch(API_BASE + 'api/docs/' + encodeURIComponent(docId));
+    if (!res.ok) throw new Error('加载失败');
+    const doc = await res.json();
+
+    if (nameEl) nameEl.textContent = doc.name;
+    _setDocEditorVisible(true);
+
+    if (editable) {
+      // 纯文本：加载内容到编辑器
+      if (textEl) textEl.style.display = 'block';
+      if (previewEl) previewEl.classList.add('hidden');
+      if (tabEdit) tabEdit.classList.add('active');
+      if (tabPreview) tabPreview.classList.remove('active');
+      try {
+        const dlRes = await fetch(doc.url);
+        const text = await dlRes.text();
+        _origDocContent = text;
+        if (textEl) textEl.value = text;
+        _renderPreview(text);
+      } catch (e2) {
+        _origDocContent = '';
+        if (textEl) textEl.value = '';
+        if (previewEl) previewEl.innerHTML = '<p style="color:#e5484d">内容加载失败</p>';
+      }
+    } else {
+      // 二进制：只下载
+      if (textEl) textEl.style.display = 'none';
+      if (previewEl) previewEl.classList.remove('hidden');
+      if (tabEdit) tabEdit.classList.remove('active');
+      if (tabPreview) tabPreview.classList.add('active');
+      if (previewEl) previewEl.innerHTML = '<p style="color:#888">此文件不支持在线预览，请 <a href="' + doc.url + '" target="_blank">下载</a></p>';
+      if (textEl) textEl.value = '';
+      _origDocContent = '';
+    }
+
+    // 改动记录
+    if (changeLog) {
+      const changes = doc.changes || [];
+      if (changes.length === 0) {
+        changeLog.innerHTML = '<div style="color:#bbb;font-size:11px">暂无改动记录</div>';
+      } else {
+        changeLog.innerHTML = changes.slice().reverse().map(c =>
+          '<div class="doc-change-item"><span class="doc-change-action">' + escapeHtml(c.action) + '</span> ' +
+          escapeHtml(c.actor) + ' <span class="doc-change-time">' + _fmtTime(c.created_at) + '</span>' +
+          (c.summary ? ' — ' + escapeHtml(c.summary) : '') + '</div>'
+        ).join('');
+      }
+    }
+  } catch (e) {
+    _setDocEditorVisible(false);
+    _showDocError('加载文档失败');
+  }
+}
+
+function _renderPreview(text) {
+  const previewEl = document.getElementById('doc-editor-preview');
+  if (!previewEl) return;
+  try {
+    if (typeof marked !== 'undefined') {
+      const html = marked.parse(text || '');
+      previewEl.innerHTML = html;
+      if (typeof hljs !== 'undefined') {
+        previewEl.querySelectorAll('pre code').forEach(block => {
+          hljs.highlightElement(block);
+        });
+      }
+    } else {
+      // fallback：无 marked.js → 转义显示
+      previewEl.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-all;">' + escapeHtml(text) + '</pre>';
+    }
+  } catch (e) {
+    previewEl.innerHTML = '<pre style="white-space:pre-wrap;">' + escapeHtml(text) + '</pre>';
+  }
+}
+
+async function saveDoc() {
+  const docId = _currentDocId;
+  const textEl = document.getElementById('doc-editor-text');
+  const content = textEl ? textEl.value : '';
+  if (!docId) return;
+  try {
+    const res = await fetch(API_BASE + 'api/docs/' + encodeURIComponent(docId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '保存失败');
+    }
+    _origDocContent = content;
+    _showDocOk('已保存');
+    // 刷新列表
+    loadDocList();
+  } catch (e) {
+    _showDocError('保存失败: ' + e.message);
+  }
+}
+
+function cancelDocEdit() {
+  const textEl = document.getElementById('doc-editor-text');
+  if (textEl) textEl.value = _origDocContent;
+  _setDocEditorVisible(false);
+  _currentDocId = null;
+}
+
+function setupDocPanel() {
+  // ☰ 菜单初始化
+  setupPanelMenu();
+
+  // 上传按钮
+  const uploadBtn = document.getElementById('doc-upload-btn');
+  const fileInput = document.getElementById('doc-file-input');
+  if (uploadBtn && fileInput) {
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      if (!fileInput.files || fileInput.files.length === 0) return;
+      const file = fileInput.files[0];
+      const overwriteSel = document.getElementById('doc-overwrite-select');
+      const docId = overwriteSel ? overwriteSel.value : '';
+      await doUploadDoc(file, docId);
+      fileInput.value = '';
+    });
+  }
+
+  // 新建文档按钮
+  const newBtn = document.getElementById('doc-new-btn');
+  if (newBtn) {
+    newBtn.addEventListener('click', async () => {
+      const nameInput = document.getElementById('doc-new-name');
+      const name = nameInput ? nameInput.value.trim() : '';
+      if (!name) { _showDocError('请输入文件名'); return; }
+      try {
+        const res = await fetch(API_BASE + 'api/docs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, content: '' }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || '创建失败');
+        }
+        const doc = await res.json();
+        _showDocOk('已创建: ' + name);
+        if (nameInput) nameInput.value = '';
+        await loadDocList();
+        openDoc(doc.id, true);
+      } catch (e) {
+        _showDocError('创建失败: ' + e.message);
+      }
+    });
+  }
+
+  // 刷新按钮
+  const reloadBtn = document.getElementById('doc-reload-btn');
+  if (reloadBtn) reloadBtn.addEventListener('click', loadDocList);
+
+  // 搜索过滤
+  const searchInput = document.getElementById('doc-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', loadDocList);
+  }
+
+  // 编辑/预览切换
+  const tabEdit = document.getElementById('doc-tab-edit');
+  const tabPreview = document.getElementById('doc-tab-preview');
+  const textEl = document.getElementById('doc-editor-text');
+  const previewEl = document.getElementById('doc-editor-preview');
+
+  function switchTab(tab) {
+    if (tab === 'edit') {
+      if (tabEdit) tabEdit.classList.add('active');
+      if (tabPreview) tabPreview.classList.remove('active');
+      if (textEl) textEl.style.display = 'block';
+      if (previewEl) previewEl.classList.add('hidden');
+    } else {
+      if (tabEdit) tabEdit.classList.remove('active');
+      if (tabPreview) tabPreview.classList.add('active');
+      if (textEl) textEl.style.display = 'none';
+      if (previewEl) {
+        previewEl.classList.remove('hidden');
+        if (textEl) _renderPreview(textEl.value);
+      }
+    }
+  }
+  if (tabEdit) tabEdit.addEventListener('click', () => switchTab('edit'));
+  if (tabPreview) tabPreview.addEventListener('click', () => switchTab('preview'));
+
+  // 保存按钮
+  const saveBtn = document.getElementById('doc-editor-save');
+  if (saveBtn) saveBtn.addEventListener('click', saveDoc);
+
+  // 取消按钮
+  const cancelBtn = document.getElementById('doc-editor-cancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', cancelDocEdit);
+
+  // 填充覆盖下拉（加载已有文档列表）
+  async function loadOverwriteOptions() {
+    const sel = document.getElementById('doc-overwrite-select');
+    if (!sel) return;
+    try {
+      const res = await fetch(API_BASE + 'api/docs?limit=200');
+      const data = await res.json();
+      sel.innerHTML = '<option value="">不覆盖（新建）</option>';
+      (data.docs || []).forEach(doc => {
+        const opt = document.createElement('option');
+        opt.value = doc.id;
+        opt.textContent = doc.name + ' (' + doc.owner_type + ' ' + doc.owner + ')';
+        sel.appendChild(opt);
+      });
+    } catch (e) { /* ignore */ }
+  }
+  loadOverwriteOptions();
+}
+
+async function doUploadDoc(file, docId) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (docId) formData.append('doc_id', docId);
+  try {
+    const res = await fetch(API_BASE + 'api/docs/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '上传失败');
+    }
+    const data = await res.json();
+    _showDocOk((data.action === 'overwrite' ? '已覆盖: ' : '已上传: ') + data.name);
+    await loadDocList();
+  } catch (e) {
+    _showDocError('上传失败: ' + e.message);
+  }
+}

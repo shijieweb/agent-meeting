@@ -234,15 +234,101 @@ def do_reply(name, msg_id, content=None, content_file=None, target_type=None, ta
     return r
 
 
+# ---------------------------------------------------------------------------
+# 文档协作（design v2.5 §十二 12.3）
+# ---------------------------------------------------------------------------
+
+def _req_multipart(method, path, fields=None, files=None, timeout=30):
+    """发起 multipart/form-data 请求，返回解析后的 JSON。
+
+    fields: dict[str, str] — 表单文本字段
+    files: dict[str, tuple(fname, data_bytes, mime)] — 文件字段
+    """
+    import uuid as _uuid
+    import mimetypes
+
+    boundary = "----WB" + _uuid.uuid4().hex
+    buf = bytearray()
+    for k, v in (fields or {}).items():
+        if v is None:
+            continue
+        buf += (
+            "--{0}\r\n"
+            "Content-Disposition: form-data; name=\"{1}\"\r\n\r\n"
+            "{2}\r\n".format(boundary, k, v)
+        ).encode("utf-8")
+    for k, (fname, data, mime) in (files or {}).items():
+        buf += (
+            "--{0}\r\n"
+            "Content-Disposition: form-data; name=\"{1}\"; filename=\"{2}\"\r\n"
+            "Content-Type: {3}\r\n\r\n".format(boundary, k, fname, mime)
+        ).encode("utf-8")
+        buf += data + b"\r\n"
+    buf += ("--{0}--\r\n".format(boundary)).encode("utf-8")
+
+    url = SERVER + path
+    req = urllib.request.Request(
+        url,
+        data=bytes(buf),
+        method=method,
+        headers={"Content-Type": "multipart/form-data; boundary=" + boundary},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8", "ignore")
+        return json.loads(raw) if raw else {}
+
+
+def do_upload(name, content_file, doc_id=None):
+    """上传/覆盖本地文件（multipart）。
+
+    usage: loop.py upload --file <本地路径> [--doc-id <id>]
+    - 不带 --doc-id：新建文档（仅 super-admin，人类操作员）；
+    - 带 --doc-id：覆盖已有文档（仅 owner 为自身的文档）。
+    """
+    if not os.path.isfile(content_file):
+        print("[ERR] 文件不存在: " + content_file, file=sys.stderr)
+        sys.exit(1)
+    with open(content_file, "rb") as f:
+        data = f.read()
+    basename = os.path.basename(content_file)
+    mime, _ = mimetypes.guess_type(content_file)
+    if not mime:
+        mime = "application/octet-stream"
+    fields = {"agent_name": name}
+    if doc_id:
+        fields["doc_id"] = doc_id
+    result = _req_multipart(
+        "POST",
+        "/api/docs/upload",
+        fields=fields,
+        files={"file": (basename, data, mime)},
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
+
+
+def do_delete_doc(name, doc_id):
+    """删除自己上传的文档。
+
+    usage: loop.py delete-doc --doc-id <id>
+    仅限 owner 为自身的文档（owner_type=agent 且 owner=name）。
+    super-admin 人类网页操作员可删任意。
+    """
+    url = "/api/docs/" + urllib.parse.quote(doc_id, safe="")
+    result = _req("DELETE", url, query={"agent_name": name})
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
+
+
 def main():
     p = argparse.ArgumentParser(
-        description="Agent Hub 连接器（本人=大脑，4 方法：init/pull/reply/end）"
+        description="Agent Hub 连接器（本人=大脑，4 方法：init/pull/reply/end + 文档：upload/delete-doc）"
     )
     p.add_argument(
         "cmd",
         nargs="?",
         default="pull",
-        choices=["init", "pull", "watch", "reply", "register", "session", "end"],
+        choices=["init", "pull", "watch", "reply", "register", "session", "end", "upload", "delete-doc"],
     )
     p.add_argument("--version", action="version", version="agent-meeting 1.0.0")
     p.add_argument("--name", dest="name", help="Agent 名字（init/session 必填；其余默认读本地 agent_name.txt）")
@@ -259,6 +345,9 @@ def main():
                    help="pull/watch 最大轮询次数（默认1000，约50分钟）")
     p.add_argument("--active", dest="active", action="store_true",
                    help="session 用：带=开会(置 online)，不带=收工(置 offline)")
+    # ---- 文档协作（design v2.5 §十二 12.3）----
+    p.add_argument("--doc-id", dest="doc_id", default=None,
+                   help="upload/delete-doc 用：目标文档 id；upload 不带=新建（Agent 不允许），带=覆盖")
     args = p.parse_args()
 
     if args.cmd == "init":
@@ -300,6 +389,23 @@ def main():
         name = resolve_name(args.name)
         do_reply(name, args.msg_id, content=args.msg, content_file=args.content_file,
                  target_type=args.target_type, target_agent=args.target_agent)
+        return
+
+    # ---- 文档协作（design v2.5 §十二 12.3）----
+    if args.cmd == "upload":
+        name = resolve_name(args.name)
+        if not args.content_file:
+            print("upload 需要 --file <本地文件路径>", file=sys.stderr)
+            sys.exit(2)
+        do_upload(name, args.content_file, doc_id=args.doc_id)
+        return
+
+    if args.cmd == "delete-doc":
+        name = resolve_name(args.name)
+        if not args.doc_id:
+            print("delete-doc 需要 --doc-id <文档id>", file=sys.stderr)
+            sys.exit(2)
+        do_delete_doc(name, args.doc_id)
         return
 
 

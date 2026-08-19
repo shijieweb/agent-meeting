@@ -106,6 +106,47 @@ def append_system_event(event: str, agent_name: str) -> dict:
     return holder.get("msg")
 
 
+def add_system_message(content, message_type="doc_event") -> dict:
+    """把一条**任意文案**的 system 消息追加进消息流（文档协作系统·一期群联动）。
+
+    与 append_system_event 的区别：后者只服务 presence 事件（文案由 _SYSTEM_EVENT_CONTENT
+    模板生成、带 event 字段）；本函数 content 由调用方给定，用于文档上传/覆盖/新建/删除
+    的群通知（content 内含 `[文件名](外网URL)` Markdown 链接，前端 renderSystemContent 渲染成
+    可点击 <a>，即 AC-4）。design v2.5 §五已核验：本函数原仓库不存在，属新增。
+
+    关键约束（与 append_system_event 完全一致，不改任何既有消息逻辑）：
+    - sender_type="system"：pull_messages / agent_has_unread 的未读过滤只取 sender_type=="user"，
+      故系统消息天然不进未读统计、不走 pull 通道、不入 reads.json 回执；
+    - 用 update_json_atomic(MESSAGES_FILE, [], _add) 原地 append（D-1 铁律：不可只返回新对象）；
+    - 不写 reads.json（通知类消息无回执）；
+    - message_type 默认 "doc_event"，供前端只对文档通知做链接渲染（presence 类不受影响）。
+
+    返回写入的系统消息 dict。
+    """
+    holder = {}
+
+    def _add(msgs):
+        msg = {
+            "id": gen_id("msg"),
+            "content": content,
+            "sender_type": "system",
+            "sender_agent_name": None,
+            "target_type": None,
+            "target_agent_name": None,
+            "reply_to_message_id": None,
+            "created_at": now_iso(),
+            "client_msg_id": None,
+            "read_by": [],
+            "message_type": message_type,
+        }
+        msgs.append(msg)          # 原地修改（update_json_atomic 写回被原地修改的 data）
+        holder["msg"] = msg
+        return None
+
+    update_json_atomic(MESSAGES_FILE, [], _add)
+    return holder.get("msg")
+
+
 def send_user_message(content, target_type, target_agent_name=None, client_msg_id=None):
     """前端发送用户消息：写消息 + 为目标 Agent 建未读回执。对应方案书 §5.3 send_user_message。
 

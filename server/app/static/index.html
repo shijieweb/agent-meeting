@@ -10,8 +10,10 @@
     // '/meeting' → '/meeting/'；'/meeting/' → '/meeting/'；'/' → '/'
     var base = location.pathname;
     if (base.charAt(base.length - 1) !== '/') base += '/';
-    document.write('<link rel="stylesheet" href="' + base + 'static/styles.css?v=20260818-2">');
-    document.write('<script src="' + base + 'static/app.js?v=20260818-2"><\/script>');
+    document.write('<link rel="stylesheet" href="' + base + 'static/styles.css?v=20260819-doc1">');
+    document.write('<script src="' + base + 'static/vendor/marked.min.js"><\/script>');
+    document.write('<script src="' + base + 'static/vendor/highlight.min.js"><\/script>');
+    document.write('<script src="' + base + 'static/app.js?v=20260819-doc1"><\/script>');
   })();
   </script>
 </head>
@@ -20,11 +22,23 @@
     <header class="chat-header">
       <h1>小伙伴会议系统</h1>
       <div id="agent-status" class="agent-status"></div>
-      <!-- F-e / §3.5：右上角 ☰ 浮动管理面板按钮（不跳页） -->
+      <!-- F-e / §3.5：☰ 改造（design v2.5 §六），点击 toggle 下拉菜单 -->
       <button id="panel-toggle" class="panel-toggle" aria-label="管理面板">☰</button>
     </header>
 
-    <!-- F-e / §3.5：☰ 浮动管理面板（不跳页，URL 不变） -->
+    <!-- ☰ 下拉菜单（design v2.5 §六 / AC-1）：含 Agent 管理 + 文档管理 -->
+    <div id="panel-menu" class="panel-menu hidden">
+      <div class="panel-menu-item" id="menu-agent-mgmt" title="Agent 管理">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+        Agent 管理
+      </div>
+      <div class="panel-menu-item" id="menu-doc-mgmt" title="文档管理">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+        文档管理
+      </div>
+    </div>
+
+    <!-- F-e / §3.5：Agent 管理面板（不跳页，URL 不变） -->
     <div id="agent-panel" class="agent-panel hidden">
       <div class="panel-header">
         <span>Agent 管理</span>
@@ -40,6 +54,61 @@
         </select>
         <button type="submit">添加</button>
       </form>
+    </div>
+
+    <!-- 文档管理面板（design v2.5 §六 / AC-1~22） -->
+    <div id="doc-panel" class="doc-panel hidden">
+      <div class="panel-header">
+        <span>文档管理</span>
+        <button id="doc-panel-close" class="panel-close" aria-label="关闭">×</button>
+      </div>
+
+      <!-- 上传区 -->
+      <div class="doc-upload-area">
+        <input type="file" id="doc-file-input" accept=".txt,.md,.json,.csv,.pdf,.docx,.png,.jpg,.jpeg" style="display:none">
+        <div class="doc-upload-row">
+          <button id="doc-upload-btn" class="doc-btn doc-btn-primary">上传文件</button>
+          <select id="doc-overwrite-select" class="doc-select" title="覆盖已有文档（选"不覆盖"则新建）">
+            <option value="">不覆盖（新建）</option>
+          </select>
+        </div>
+        <div id="doc-upload-status" class="doc-upload-status"></div>
+      </div>
+
+      <!-- 新建文档区 -->
+      <div class="doc-new-area">
+        <div class="doc-new-row">
+          <input id="doc-new-name" type="text" class="doc-input" placeholder="文件名（如 notes.md）" maxlength="300">
+          <button id="doc-new-btn" class="doc-btn">新建文档</button>
+        </div>
+      </div>
+
+      <!-- 搜索/过滤 -->
+      <div class="doc-filter-area">
+        <input id="doc-search-input" type="text" class="doc-input" placeholder="搜索文件名…" style="flex:1">
+        <button id="doc-reload-btn" class="doc-btn">刷新</button>
+      </div>
+
+      <!-- 文档列表 -->
+      <div id="doc-list" class="doc-list"></div>
+
+      <!-- 编辑区（默认隐藏，选中文档后显示） -->
+      <div id="doc-editor-area" class="doc-editor-area hidden">
+        <div class="doc-editor-header">
+          <span id="doc-editor-name" class="doc-editor-name"></span>
+          <div class="doc-editor-actions">
+            <button id="doc-editor-save" class="doc-btn doc-btn-primary">保存</button>
+            <button id="doc-editor-cancel" class="doc-btn">取消</button>
+          </div>
+        </div>
+        <div class="doc-editor-mode-tabs">
+          <button id="doc-tab-edit" class="doc-tab active">编辑</button>
+          <button id="doc-tab-preview" class="doc-tab">预览</button>
+        </div>
+        <textarea id="doc-editor-text" class="doc-editor-text" placeholder="文档内容…" style="display:block"></textarea>
+        <div id="doc-editor-preview" class="doc-editor-preview hidden"></div>
+        <div id="doc-change-log" class="doc-change-log"></div>
+      </div>
     </div>
 
     <main id="message-list" class="message-list"></main>

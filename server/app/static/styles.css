@@ -406,3 +406,336 @@ html, body {
   font-family: inherit;
 }
 .panel-create-form button:hover { background: #1e9bd8; }
+
+/* ============================================================
+   ☰ 下拉菜单（design v2.5 §六 / AC-1）
+   ============================================================ */
+.panel-menu {
+  position: absolute;
+  top: 52px;
+  right: 8px;
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  z-index: 60;
+  overflow: hidden;
+  min-width: 160px;
+}
+.panel-menu.hidden { display: none; }
+
+.panel-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #1f2329;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.panel-menu-item:hover { background: #f0f7ff; color: #2AABEE; }
+
+/* ============================================================
+   文档管理面板（design v2.5 §六 / AC-1~22）
+   ============================================================ */
+.doc-panel {
+  position: absolute;
+  top: 56px;
+  right: 8px;
+  width: 480px;
+  max-width: 96vw;
+  max-height: 82vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 14px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.18);
+  z-index: 55;
+  padding: 0;
+}
+.doc-panel.hidden { display: none; }
+
+/* 上传区 */
+.doc-upload-area {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.doc-upload-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.doc-upload-status {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+  min-height: 16px;
+}
+.doc-upload-status.ok { color: #2BAE66; }
+.doc-upload-status.err { color: #e5484d; }
+
+/* 新建区 */
+.doc-new-area {
+  padding: 8px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.doc-new-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 过滤区 */
+.doc-filter-area {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* 通用按钮 / 输入 */
+.doc-btn {
+  border: 1px solid #2AABEE;
+  background: #fff;
+  color: #2AABEE;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.doc-btn:hover { background: #E8F4FD; }
+.doc-btn:active { background: #cfe8fa; }
+.doc-btn.doc-btn-primary { background: #2AABEE; color: #fff; }
+.doc-btn.doc-btn-primary:hover { background: #1e9bd8; }
+.doc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.doc-input {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  flex: 1;
+  min-width: 0;
+}
+.doc-input:focus { outline: none; border-color: #2AABEE; }
+
+.doc-select {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  max-width: 200px;
+}
+
+/* 文档列表 */
+.doc-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.doc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f8f8f8;
+  transition: background 0.1s;
+}
+.doc-item:hover { background: #f5f9ff; }
+.doc-item.selected { background: #e8f4fd; }
+.doc-item-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+}
+.doc-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.doc-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-item-meta {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 2px;
+}
+.doc-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.doc-item-actions .doc-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.doc-owner-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.doc-owner-badge.user { background: #E8F4FD; color: #2AABEE; }
+.doc-owner-badge.agent { background: #FFF4E1; color: #E08A00; }
+.doc-mime-badge {
+  font-size: 10px;
+  color: #bbb;
+}
+
+/* 编辑区 */
+.doc-editor-area {
+  border-top: 1px solid #e0e0e0;
+  padding: 12px 14px;
+}
+.doc-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.doc-editor-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2329;
+}
+.doc-editor-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 编辑/预览切换 */
+.doc-editor-mode-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+.doc-tab {
+  border: none;
+  background: transparent;
+  color: #999;
+  font-size: 13px;
+  padding: 5px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+}
+.doc-tab:hover { color: #2AABEE; }
+.doc-tab.active { color: #2AABEE; border-bottom-color: #2AABEE; font-weight: 600; }
+
+.doc-editor-text {
+  width: 100%;
+  min-height: 160px;
+  max-height: 320px;
+  resize: vertical;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+.doc-editor-text.hidden { display: none; }
+
+.doc-editor-preview {
+  min-height: 160px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  background: #fafafa;
+}
+.doc-editor-preview.hidden { display: none; }
+
+/* 改动记录 */
+.doc-change-log {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.doc-change-item {
+  padding: 4px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+.doc-change-action {
+  font-weight: 600;
+  color: #555;
+}
+.doc-change-time { color: #bbb; margin-left: 6px; }
+
+/* MD 渲染（预览区） */
+.doc-editor-preview h1, .doc-editor-preview h2, .doc-editor-preview h3,
+.doc-editor-preview h4 {
+  margin: 10px 0 4px;
+  color: #1f2329;
+}
+.doc-editor-preview h1 { font-size: 1.3em; }
+.doc-editor-preview h2 { font-size: 1.2em; }
+.doc-editor-preview h3 { font-size: 1.1em; }
+.doc-editor-preview p { margin: 6px 0; }
+.doc-editor-preview ul, .doc-editor-preview ol { margin: 6px 0 6px 20px; }
+.doc-editor-preview li { margin: 3px 0; }
+.doc-editor-preview code {
+  background: rgba(42, 171, 238, 0.1);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88em;
+  color: #1c6f97;
+}
+.doc-editor-preview pre {
+  background: #1f2329;
+  color: #e8e8e8;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.doc-editor-preview pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+.doc-editor-preview blockquote {
+  border-left: 3px solid #2AABEE;
+  margin: 8px 0;
+  padding: 4px 10px;
+  color: #555;
+  background: rgba(42, 171, 238, 0.06);
+}
+.doc-editor-preview a {
+  color: #2AABEE;
+  text-decoration: none;
+}
+.doc-editor-preview a:hover { text-decoration: underline; }
+.doc-editor-preview strong { font-weight: 700; }
+
+/* 移动端适配 */
+@media (max-width: 520px) {
+  .doc-panel {
+    left: 4px;
+    right: 4px;
+    width: auto;
+    top: 50px;
+  }
+}
+

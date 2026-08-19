@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from app.config import OFFLINE_WINDOW_SECONDS, LOST_TIMEOUT
-from app.routers import agents, messages
+from app.routers import agents, docs, messages
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "app", "static")
@@ -36,6 +36,7 @@ app = FastAPI(title="Agent Hub", version="1.0 (MVP)")
 
 app.include_router(agents.router)
 app.include_router(messages.router)
+app.include_router(docs.router)
 
 app.mount(
     "/static",

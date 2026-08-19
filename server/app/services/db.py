@@ -121,6 +121,41 @@ def init_db():
         )
         """
     )
+    # ---- 文档协作系统·一期（T-agent-meeting-upload，design v2.5 §三/§七）----
+    # 建表唯一入口：documents / document_changes 走独立 SQLite 表，背后无任何 JSON 文件，
+    # 因此永不进入 _dispatch()/write_table_from_list() 的整表 DELETE+INSERT 路径
+    # => R1（发消息把附件冲 NULL）在结构上不可能发生（design §一 R1 规避机制）。
+    # 幂等：CREATE TABLE IF NOT EXISTS，重跑 migrate.py 即增量补表，不触碰既有 5 表数据。
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS documents (
+            id          TEXT    PRIMARY KEY,
+            name        TEXT    NOT NULL,
+            file_uuid   TEXT    NOT NULL,
+            owner       TEXT    NOT NULL DEFAULT '',
+            owner_type  TEXT    NOT NULL DEFAULT 'user',
+            mime        TEXT    NOT NULL DEFAULT '',
+            size        INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT    NOT NULL,
+            updated_at  TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_updated ON documents(updated_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_type, owner)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_changes (
+            id          TEXT    PRIMARY KEY,
+            doc_id      TEXT    NOT NULL,
+            actor       TEXT    NOT NULL,
+            action      TEXT    NOT NULL,
+            summary     TEXT    NOT NULL DEFAULT '',
+            created_at  TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_changes_doc ON document_changes(doc_id)")
     return conn
 
 

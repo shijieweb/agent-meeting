@@ -30,3 +30,27 @@ LOST_GRACE_BEFORE_DELETE = 6 * 3600  # 失联/离线保留期：6h（老板拍�
 # 支持环境变量覆盖（默认 60）：隔离集成测试设 0 让每次 status 都真正清扫；生产不设置。
 SWEEP_INTERVAL = int(os.environ.get("SWEEP_INTERVAL", "60"))
 # 删除时点 = last_seen 距今 > LOST_TIMEOUT + LOST_GRACE_BEFORE_DELETE（= 6h20min）
+
+# ---- 文档协作系统·一期（T-agent-meeting-upload，design v2.5 §五/§八）----
+# 外网下载 URL 前缀：走 8787 反代（老板 02:15 给）。DB 只存相对 path，
+# 运行时拼 <EXTERNAL_BASE_URL>/api/docs/<id>/download（AC-11），DB 绝不存完整外网 URL。
+# 注意反代 /meeting 前缀须正确透传后端 /api（AC-11.2 部署实测）。
+EXTERNAL_BASE_URL = os.environ.get(
+    "EXTERNAL_BASE_URL", "http://agnes.owen1.de5.net/meeting"
+).rstrip("/")
+
+# 额外 super-admin 账号补充（env，逗号分隔）。默认 []：**不默认任何 agent**
+# （老板 02:14 纠正原 ["xiaobian"] 写错）。super-admin 主体 = 人类网页操作员
+# （sender_type == "user" 恒为 super-admin），本项仅作额外账号补充。
+SUPER_ADMINS = [s.strip() for s in os.environ.get("SUPER_ADMINS", "").split(",") if s.strip()]
+
+# 人类网页操作员归属哨兵：人类上传文档的 owner 值（owner_type 恒为 "user"）。
+HUMAN_OWNER = os.environ.get("HUMAN_OWNER", "user")
+
+# 上传约束：单文件 ≤5MB（超出 413）；落盘子目录 = DATA_DIR/uploads/。
+MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", str(5 * 1024 * 1024)))
+UPLOAD_SUBDIR = "uploads"
+
+# GET /api/docs 分页默认值（azhu #11 / AC-21）。
+DOC_LIST_DEFAULT_LIMIT = 50
+DOC_LIST_MAX_LIMIT = 200
