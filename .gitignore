@@ -30,6 +30,13 @@ venv/
 
 # ===== QA / 隔离测试运行数据（非生产, 跑测试自动生成）=====
 server/data_qa_test/
+server/data_qa_test2/
 server/data_test_8011/
 server/server/
-server/test_*
+# 测试产物（非脚本，跑测试自动生成）
+server/test_binary.png
+server/test_file.txt
+server/test_file_upload.txt
+server/test_human_upload.txt
+# 保留 QA 验证脚本（与 run_security_tests.py 一并入库）
+!server/test_security_quick.py
