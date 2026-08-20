@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """Agent 注册、列表、白名单管理。对应方案书 §5.1 #1/#2 + F-a/F-i 管理接口。"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.models.schemas import (
     AgentRegister, AgentManageCreate, AgentManageDelete, AgentManageUpdate,
 )
 from app.services import agent_store, message_store
+from app.auth import require_write_auth
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -70,7 +71,7 @@ def list_agents(all: bool = False):
 
 
 @router.post("/prune")
-def prune_agents():
+def prune_agents(_: None = Depends(require_write_auth)):
     """手动清理僵尸占位 agent（管理兜底；删除判定=占位>1h / 离线>6h20min，并清理已读集合孤儿文件）。"""
     removed = agent_store.prune_zombie_agents()
     return {"status": "ok", "removed": removed}
@@ -81,7 +82,7 @@ def prune_agents():
 # ---------------------------------------------------------------------------
 
 @router.post("/manage/create")
-def manage_create_endpoint(body: AgentManageCreate):
+def manage_create_endpoint(body: AgentManageCreate, _: None = Depends(require_write_auth)):
     """白名单预注册（幂等 upsert）：name 必填；read_scope 非法 → 400；已存在返回既有不覆盖。"""
     name = (body.name or "").strip()
     if not name:
@@ -94,7 +95,7 @@ def manage_create_endpoint(body: AgentManageCreate):
 
 
 @router.post("/manage/delete")
-def manage_delete_endpoint(body: AgentManageDelete):
+def manage_delete_endpoint(body: AgentManageDelete, _: None = Depends(require_write_auth)):
     """白名单删除：按 name 移除 + 级联清 reads.json + agent_read_<name>.json（F-f）。"""
     name = (body.name or "").strip()
     if not name:
@@ -110,7 +111,7 @@ def manage_list_endpoint():
 
 
 @router.patch("/manage/update")
-def manage_update_endpoint(body: AgentManageUpdate):
+def manage_update_endpoint(body: AgentManageUpdate, _: None = Depends(require_write_auth)):
     """白名单更新：改 description / read_scope（name 不可改，F-i / AC-9.1）。
 
     - name 缺失/空 → 400

@@ -2,9 +2,10 @@
 """消息拉取、提交回复、已读状态。对应方案书 §5.1 #3/#4/#5/#6。"""
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from app.models.schemas import MessageSend, MessageReply, BaseModel
 from app.services import message_store, agent_store
+from app.auth import require_write_auth
 from app.config import REPLY_MAX_LEN
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
@@ -21,7 +22,7 @@ def pull(agent_name: str = Query(..., description="Agent 名字")):
 
 
 @router.post("/reply")
-def reply(body: MessageReply):
+def reply(body: MessageReply, _: None = Depends(require_write_auth)):
     # F-a.6 / Q6：未注册 Agent 回复 → 403（原 400 升 403，白名单拦截语义）。
     if not agent_store.agent_exists(body.agent_name):
         raise HTTPException(status_code=403, detail="agent not in whitelist: " + body.agent_name)
@@ -48,7 +49,7 @@ def reply(body: MessageReply):
 
 
 @router.post("/send")
-def send(body: MessageSend):
+def send(body: MessageSend, _: None = Depends(require_write_auth)):
     # T-SEND-03 / 邻接：single 必须指定且目标 Agent 已存在，否则返回错误、不保存
     if body.target_type == "single":
         if not body.target_agent_name:
@@ -82,7 +83,7 @@ class MessageCleanup(BaseModel):
 
 
 @router.post("/cleanup")
-def cleanup(body: MessageCleanup):
+def cleanup(body: MessageCleanup, _: None = Depends(require_write_auth)):
     """F12 归档：按条数/时间清理 messages.json（删除式归档，archived=移除条数）。
 
     - 两个参数皆缺 -> 400 "provide keep_last or older_than"

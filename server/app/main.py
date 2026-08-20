@@ -2,6 +2,37 @@
 """FastAPI 入口：挂载路由与静态文件。对应方案书 §4.2 app/main.py。"""
 import os
 
+# ── R1 令牌闸（T-am-hardening-r1）：最小 .env 读取（密钥绝不硬编码）──
+# 8000 启动环境（run.bat / run.sh / uvicorn）不自动加载 .env，这里在进程启动期
+# 从候选路径读取 AM_* 环境变量注入 os.environ（仅当该变量尚未被命令行/系统设置，
+# 即命令行 env 优先）。找不到文件或缺失字段均静默跳过，绝不抛错、绝不硬编码密钥。
+def _load_am_env():
+    """从 agent-meeting/.env 或 ~/.workbuddy/.env 读取 AM_* 变量注入 os.environ。"""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates = [
+        os.path.join(base_dir, "..", ".env"),        # agent-meeting/.env
+        os.path.expanduser("~/.workbuddy/.env"),     # ~/.workbuddy/.env
+    ]
+    for path in candidates:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key, val = key.strip(), val.strip().strip('"').strip("'")
+                    # 仅注入 AM_ 前缀的令牌相关变量，且不覆盖已存在的环境变量
+                    if key.startswith("AM_") and key not in os.environ:
+                        os.environ[key] = val
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+
+
+_load_am_env()
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles

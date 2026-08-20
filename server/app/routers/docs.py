@@ -18,9 +18,10 @@
 import os
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
+from app.auth import require_write_auth
 from app.config import DOC_LIST_DEFAULT_LIMIT, DOC_LIST_MAX_LIMIT, EXTERNAL_BASE_URL
 from app.models.schemas import (
     DocChange,
@@ -80,6 +81,7 @@ def _meta(doc: dict) -> DocMeta:
 @router.post("/upload", response_model=DocUploadResponse)
 async def doc_upload(
     file: UploadFile = File(...),
+    _: None = Depends(require_write_auth),
     request: Request = None,
     agent_name: Optional[str] = Form(None, description="Agent 名字（路由推导 owner_type=agent）"),
     doc_id: Optional[str] = Form(None, description="文档 id（带此参数=覆盖已有文档，不带=新建）"),
@@ -123,7 +125,7 @@ async def doc_upload(
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=DocMeta)
-def doc_create(body: DocCreate, agent_name: Optional[str] = Query(None)):
+def doc_create(body: DocCreate, agent_name: Optional[str] = Query(None), _: None = Depends(require_write_auth)):
     actor = derive_actor(body.__dict__, agent_name)
 
     # Agent 不能新建文档（仅网页端，AC-12）
@@ -207,7 +209,7 @@ def doc_download(doc_id: str):
 # ---------------------------------------------------------------------------
 
 @router.put("/{doc_id}", response_model=DocMeta)
-def doc_edit(doc_id: str, body: DocEdit, agent_name: Optional[str] = Query(None)):
+def doc_edit(doc_id: str, body: DocEdit, agent_name: Optional[str] = Query(None), _: None = Depends(require_write_auth)):
     actor = derive_actor(body.__dict__, agent_name)
 
     if body.content is None and body.name is None:
@@ -225,6 +227,7 @@ def doc_edit(doc_id: str, body: DocEdit, agent_name: Optional[str] = Query(None)
 def doc_delete(
     doc_id: str,
     agent_name: Optional[str] = Query(None, description="Agent 名字（路由推导 owner_type=agent）"),
+    _: None = Depends(require_write_auth),
 ):
     actor = derive_actor({}, agent_name)
     result = delete_doc(doc_id, actor)
