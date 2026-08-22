@@ -30,6 +30,14 @@ def setup():
 
 def cleanup(tmp):
     shutil.rmtree(tmp, ignore_errors=True)
+    # 重置单例连接，防止指向已删除的数据库
+    from app.services import db as main_db
+    if hasattr(main_db, '_CONN') and main_db._CONN:
+        try:
+            main_db._CONN.close()
+        except:
+            pass
+        main_db._CONN = None
 
 def check(name, cond):
     global PASS, FAIL
