@@ -8,7 +8,6 @@
 - PATCH /api/workflows/{id}    更新工作流（如归档）
 - DELETE /api/workflows/{id}   删除工作流
 """
-import json
 import logging
 import time
 from typing import List, Optional
@@ -18,12 +17,14 @@ from pydantic import BaseModel, Field
 
 from app.services import message_store
 from app.auth import require_write_auth
+from app.services.collab_db import CollabDB
+from app.config import DATA_DIR
 
 logger = logging.getLogger("am_workflows")
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
-# 内存存储（生产可换SQLite，T-collab-02）
-_workflows: dict = {}  # id -> workflow dict
+# 持久化层
+_db = CollabDB(DATA_DIR)
 
 
 # ---- 数据模型 ----
@@ -56,14 +57,17 @@ class WorkflowDetail(BaseModel):
 
 # ---- 工具函数 ----
 
-def _gen_id() -> str:
-    return f"wf_{int(time.time() * 1000)}"
-
-
 def _ensure_workflow_exists(wf_id: str) -> dict:
-    wf = _workflows.get(wf_id)
+    wf = _db.workflow_get(wf_id)
     if not wf:
         raise HTTPException(status_code=404, detail=f"Workflow not found: {wf_id}")
+    return wf
+
+
+def _to_detail(wf: dict) -> dict:
+    """把 DB 结果包装成与 WorkflowDetail 对齐的 dict。"""
+    wf["message_count"] = _count_messages(wf["id"])
+    wf["archived"] = bool(wf.get("archived"))
     return wf
 
 
@@ -78,80 +82,67 @@ def _count_messages(wf_id: str) -> int:
 
 # ---- 端点 ----
 
-@router.post("", response_model=WorkflowDetail, status_code=201)
+@router.post("", response_model=dict, status_code=201)
 def create_workflow(body: WorkflowCreate, _: None = Depends(require_write_auth)):
     """创建工作流。"""
-    wf_id = _gen_id()
-    now = time.strftime("%Y-%m-%dT%H:%M:%S")
-    wf = {
-        "id": wf_id,
-        "name": body.name,
-        "description": body.description,
-        "participants": body.participants,
-        "metadata": body.metadata,
-        "archived": False,
-        "created_at": now,
-        "updated_at": now,
-    }
-    _workflows[wf_id] = wf
-    logger.info("workflow created: %s (%s)", wf_id, body.name)
-    return WorkflowDetail(
-        **wf,
-        message_count=_count_messages(wf_id),
+    wf_id = f"wf_{int(time.time() * 1000)}"
+    wf = _db.workflow_create(
+        wf_id=wf_id,
+        name=body.name,
+        description=body.description,
+        participants=body.participants,
+        metadata=body.metadata,
     )
+    logger.info("workflow created: %s (%s)", wf_id, body.name)
+    return _to_detail(wf)
 
 
-@router.get("", response_model=List[WorkflowDetail])
+@router.get("", response_model=List[dict])
 def list_workflows(
     archived: bool = Query(False, description="是否包含已归档"),
     participant: Optional[str] = Query(None, description="按参与者过滤"),
 ):
     """列出工作流。"""
+    wfs = _db.workflow_list(archived=archived, participant=participant)
     result = []
-    for wf in _workflows.values():
-        if wf["archived"] and not archived:
-            continue
-        if participant and participant not in wf.get("participants", []):
-            continue
-        result.append(WorkflowDetail(
-            **wf,
-            message_count=_count_messages(wf["id"]),
-        ))
+    for wf in wfs:
+        wf["archived"] = bool(wf.get("archived"))
+        wf["message_count"] = _count_messages(wf["id"])
+        result.append(wf)
     return sorted(result, key=lambda x: x["created_at"], reverse=True)
 
 
-@router.get("/{wf_id}", response_model=WorkflowDetail)
+@router.get("/{wf_id}", response_model=dict)
 def get_workflow(wf_id: str):
     """查看单个工作流详情。"""
     wf = _ensure_workflow_exists(wf_id)
-    return WorkflowDetail(
-        **wf,
-        message_count=_count_messages(wf_id),
-    )
+    return _to_detail(wf)
 
 
-@router.patch("/{wf_id}", response_model=WorkflowDetail)
+@router.patch("/{wf_id}", response_model=dict)
 def update_workflow(wf_id: str, body: WorkflowUpdate, _: None = Depends(require_write_auth)):
     """更新工作流。"""
     wf = _ensure_workflow_exists(wf_id)
+    updates = {}
     if body.name is not None:
-        wf["name"] = body.name
+        updates["name"] = body.name
     if body.description is not None:
-        wf["description"] = body.description
+        updates["description"] = body.description
     if body.archived is not None:
-        wf["archived"] = body.archived
+        updates["archived"] = int(body.archived)
     if body.metadata is not None:
-        wf["metadata"].update(body.metadata)
-    wf["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    return WorkflowDetail(
-        **wf,
-        message_count=_count_messages(wf_id),
-    )
+        existing_meta = wf.get("metadata", {})
+        existing_meta.update(body.metadata)
+        updates["metadata"] = existing_meta
+    updated = _db.workflow_update(wf_id, **updates)
+    return _to_detail(updated)
 
 
 @router.delete("/{wf_id}", status_code=204)
 def delete_workflow(wf_id: str, _: None = Depends(require_write_auth)):
     """删除工作流。"""
     wf = _ensure_workflow_exists(wf_id)
-    del _workflows[wf_id]
+    deleted = _db.workflow_delete(wf_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Workflow not found: {wf_id}")
     logger.info("workflow deleted: %s", wf_id)
