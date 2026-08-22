@@ -931,6 +931,7 @@ runWhenReady(function () {
   init();
   setupDocPanel();   // 文档管理面板（design v2.5 §六 / AC-1~22）
   setupTaskPanel();  // 任务管理面板（T-collab-01 Task6）
+  setupAuditPanel(); // R2：操作审计面板
 });
 
 /* ================================================================
@@ -1671,5 +1672,104 @@ async function checkUnreadOnPoll(newMessages) {
     agentMsgs.forEach(msg => {
       unreadMsgIdsInViewport.add(msg.id);
     });
+  }
+}
+
+// R2: 审计面板功能
+async function loadAuditActions() {
+  try {
+    const res = await fetch(API_BASE + 'api/audit?limit=100');
+    return await res.json();
+  } catch (e) {
+    console.error('Failed to load audit actions:', e);
+    return [];
+  }
+}
+
+function renderAuditItem(action) {
+  const div = document.createElement('div');
+  div.className = 'audit-item';
+  
+  const icons = {
+    'delete_message': '🗑️',
+    'cleanup_messages': '📦',
+    'upload_doc': '📤',
+    'edit_doc': '✏️',
+    'delete_doc': '🗑️',
+    'create_doc': '📝',
+  };
+  const icon = icons[action.action] || '📋';
+  const time = action.created_at ? action.created_at.slice(0, 16) : '';
+  
+  div.innerHTML = \`
+    <span class="audit-icon">\${icon}</span>
+    <div class="audit-content">
+      <div class="audit-actor">\${action.actor || 'system'}</div>
+      <div class="audit-action">\${action.action}</div>
+      <div class="audit-summary">\${action.summary || ''}</div>
+    </div>
+    <span class="audit-time">\${time}</span>
+  \`;
+  return div;
+}
+
+async function loadAuditList() {
+  const list = document.getElementById('audit-list');
+  if (!list) return;
+  
+  const actor = document.getElementById('audit-filter-actor')?.value || '';
+  const action = document.getElementById('audit-filter-action')?.value || '';
+  
+  let url = API_BASE + 'api/audit?limit=100';
+  if (actor) url += '&actor=' + encodeURIComponent(actor);
+  if (action) url += '&action=' + encodeURIComponent(action);
+  
+  try {
+    const res = await fetch(url);
+    const actions = await res.json();
+    
+    if (!actions.length) {
+      list.innerHTML = '<p style="color:#8c959f">暂无审计记录</p>';
+      return;
+    }
+    
+    list.innerHTML = '';
+    actions.forEach(a => list.appendChild(renderAuditItem(a)));
+  } catch (e) {
+    list.innerHTML = '<p style="color:#cf222e">加载失败</p>';
+  }
+}
+
+function setupAuditPanel() {
+  const menu = document.getElementById('panel-menu');
+  const auditPanel = document.getElementById('audit-panel');
+  const auditClose = document.getElementById('audit-panel-close');
+  const menuAudit = document.getElementById('menu-audit-mgmt');
+  const btnRefresh = document.getElementById('audit-btn-refresh');
+  const filterActor = document.getElementById('audit-filter-actor');
+  const filterAction = document.getElementById('audit-filter-action');
+  
+  if (menuAudit) {
+    menuAudit.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      auditPanel?.classList.remove('hidden');
+      loadAuditList();
+    });
+  }
+  
+  if (auditClose) {
+    auditClose.addEventListener('click', () => auditPanel?.classList.add('hidden'));
+  }
+  
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', loadAuditList);
+  }
+  
+  if (filterActor) {
+    filterActor.addEventListener('change', loadAuditList);
+  }
+  
+  if (filterAction) {
+    filterAction.addEventListener('change', loadAuditList);
   }
 }

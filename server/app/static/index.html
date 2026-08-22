@@ -42,6 +42,10 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         任务管理
       </div>
+      <div class="panel-menu-item" id="menu-audit-mgmt" title="操作审计">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+        操作审计
+      </div>
     </div>
 
     <!-- F-e / §3.5：Agent 管理面板（不跳页，URL 不变） -->
@@ -146,6 +150,30 @@
         </div>
       </div>
       <div id="task-list" class="task-list"></div>
+
+    <!-- R2: 审计面板 -->
+    <div id="audit-panel" class="doc-panel hidden">
+      <div class="panel-header">
+        <span>操作审计</span>
+        <button id="audit-panel-close" class="panel-close" aria-label="关闭">×</button>
+      </div>
+      <div class="audit-toolbar">
+        <select id="audit-filter-actor" class="doc-select">
+          <option value="">所有操作者</option>
+        </select>
+        <select id="audit-filter-action" class="doc-select">
+          <option value="">所有操作</option>
+          <option value="delete_message">删除消息</option>
+          <option value="cleanup_messages">清理消息</option>
+          <option value="upload_doc">上传文档</option>
+          <option value="edit_doc">编辑文档</option>
+          <option value="delete_doc">删除文档</option>
+        </select>
+        <button id="audit-btn-refresh" class="doc-btn">刷新</button>
+      </div>
+      <div id="audit-list" class="audit-list"></div>
+    </div>
+
     </div>
 
     <main id="message-list" class="message-list"></main>

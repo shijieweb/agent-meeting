@@ -607,4 +607,15 @@ def cleanup_messages(keep_last=None, older_than=None):
         return None
 
     update_json_atomic(READS_FILE, [], _mut_reads)
+    # R2: 记录清理审计
+    try:
+        from app.services import audit as audit_svc
+        audit_svc.record_action(
+            actor="system",
+            action=audit_svc.ACTION_CLEANUP_MESSAGES,
+            target_type="messages",
+            summary=f"archived={archived}, remaining={remaining}",
+        )
+    except Exception:
+        pass
     return {"archived": archived, "remaining": remaining}

@@ -160,6 +160,23 @@ def init_db():
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_changes_doc ON document_changes(doc_id)")
+    # ---- R2 操作审计表 ----
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id          TEXT    PRIMARY KEY,
+            actor       TEXT    NOT NULL,
+            action      TEXT    NOT NULL,
+            target_type TEXT    NOT NULL DEFAULT 'system',
+            target_id   TEXT,
+            summary     TEXT    NOT NULL DEFAULT '',
+            created_at  TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)")
     return conn
 
 

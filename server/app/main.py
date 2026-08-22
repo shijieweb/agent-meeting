@@ -38,7 +38,7 @@ from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
 from app.config import OFFLINE_WINDOW_SECONDS, LOST_TIMEOUT
-from app.routers import agents, docs, messages, meetings, workflows, tasks
+from app.routers import agents, docs, messages, meetings, workflows, tasks, audit
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "app", "static")
@@ -71,6 +71,7 @@ app.include_router(docs.router)
 app.include_router(meetings.router)
 app.include_router(workflows.router)
 app.include_router(tasks.router)
+app.include_router(audit.router)
 
 app.mount(
     "/static",
