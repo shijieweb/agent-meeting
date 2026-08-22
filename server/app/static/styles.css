@@ -764,3 +764,63 @@ html, body {
   }
 }
 
+
+/* ===== 任务管理面板 ===== */
+.task-toolbar {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.task-form {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 12px;
+}
+.task-form.hidden { display: none; }
+.task-form input,
+.task-form textarea,
+.task-form select {
+  padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 6px;
+  font-size: 14px; background: #fff; color: #24292f;
+}
+.task-form textarea { min-height: 60px; resize: vertical; }
+.task-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task-item {
+  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.task-item-header {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+}
+.task-item-title {
+  font-weight: 600; font-size: 14px; color: #24292f; flex: 1;
+}
+.task-item-meta {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.task-badge {
+  display: inline-flex; align-items: center; padding: 2px 8px;
+  border-radius: 12px; font-size: 11px; font-weight: 500;
+}
+.task-badge-pending { background: #eaeef2; color: #57606a; }
+.task-badge-in_progress { background: #ddf4ff; color: #0969da; }
+.task-badge-review { background: #fff8cc; color: #9a6700; }
+.task-badge-completed { background: #dafbe1; color: #1a7f37; }
+.task-badge-cancelled { background: #ffebe9; color: #cf222e; }
+.task-badge-high { background: #ffebda; color: #bf3989; }
+.task-badge-urgent { background: #ffccd5; color: #a40e26; }
+.task-badge-medium { background: #eaeef2; color: #57606a; }
+.task-badge-low { background: #eaeef2; color: #8c959f; }
+.task-item-desc { font-size: 13px; color: #57606a; white-space: pre-wrap; }
+.task-item-footer {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.task-item-footer span { font-size: 12px; color: #8c959f; }
+.task-item-actions { display: flex; gap: 4px; margin-left: auto; }
+.task-item-actions button {
+  padding: 4px 10px; border: 1px solid #d0d7de; border-radius: 6px;
+  background: #f6f8fa; color: #24292f; font-size: 12px; cursor: pointer;
+}
+.task-item-actions button:hover { background: #eaeef2; }
+.task-item-actions .btn-complete { background: #dafbe1; border-color: #38d076; color: #1a7f37; }
+.task-item-actions .btn-complete:hover { background: #bad8c0; }
+.task-item-actions .btn-delete { background: #ffebe9; border-color: #ff8182; color: #cf222e; }
+.task-item-actions .btn-delete:hover { background: #ffced1; }

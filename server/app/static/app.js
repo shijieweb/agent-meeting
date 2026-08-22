@@ -904,6 +904,7 @@ runWhenReady(function () {
   }
   init();
   setupDocPanel();   // 文档管理面板（design v2.5 §六 / AC-1~22）
+  setupTaskPanel();  // 任务管理面板（T-collab-01 Task6）
 });
 
 /* ================================================================
@@ -1370,3 +1371,140 @@ async function doUploadDoc(file, docId) {
     _showDocError('上传失败: ' + e.message);
   }
 }
+
+/* =====================================================================
+   任务管理面板（T-collab-01 Task6）
+   ===================================================================== */
+
+async function loadTaskAgents() {
+  const sel = document.getElementById('task-new-assignee');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">选择负责人...</option>';
+  try {
+    const res = await fetch(API_BASE + 'api/agents');
+    if (!res.ok) return;
+    const data = await res.json();
+    (data || []).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.name;
+      opt.textContent = a.name + (a.role !== 'general' ? ' [' + a.role.toUpperCase() + ']' : '');
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* ignore */ }
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function loadTasks() {
+  const list = document.getElementById('task-list');
+  if (!list) return;
+  try {
+    const res = await fetch(API_BASE + 'api/tasks?limit=100');
+    if (!res.ok) { list.innerHTML = '<p style="color:#8c959f">加载失败</p>'; return; }
+    const tasks = await res.json();
+    if (!tasks.length) { list.innerHTML = '<p style="color:#8c959f">暂无任务，点"+新建任务"创建</p>'; return; }
+    list.innerHTML = '';
+    tasks.forEach(t => list.appendChild(renderTaskItem(t)));
+  } catch (e) {
+    list.innerHTML = '<p style="color:#cf222e">加载失败: ' + escHtml(e.message) + '</p>';
+  }
+}
+
+function renderTaskItem(t) {
+  const div = document.createElement('div');
+  div.className = 'task-item';
+  div.dataset.id = t.id;
+  const statusMap = {
+    pending: ['待办', 'task-badge-pending'],
+    in_progress: ['进行中', 'task-badge-in_progress'],
+    review: ['待验证', 'task-badge-review'],
+    completed: ['已完成', 'task-badge-completed'],
+    cancelled: ['已取消', 'task-badge-cancelled'],
+  };
+  const [statusLabel, statusClass] = statusMap[t.status] || ['未知', 'task-badge-pending'];
+  const priMap = { low: ['低', 'task-badge-low'], medium: ['中', 'task-badge-medium'], high: ['高', 'task-badge-high'], urgent: ['紧急', 'task-badge-urgent'] };
+  const [priLabel, priClass] = priMap[t.priority] || ['中', 'task-badge-medium'];
+  const descHtml = t.description ? '<div class="task-item-desc">' + escHtml(t.description).slice(0, 200) + (t.description.length > 200 ? '\u2026' : '') + '</div>' : '';
+  let actions = '';
+  if (t.status === 'pending') actions += '<button class="btn-start" data-id="' + t.id + '">开始</button>';
+  if (t.status === 'in_progress' || t.status === 'review') actions += '<button class="btn-complete" data-id="' + t.id + '">完成</button>';
+  if (t.status === 'pending' || t.status === 'in_progress') actions += '<button class="btn-cancel" data-id="' + t.id + '">取消</button>';
+  actions += '<button class="btn-delete" data-id="' + t.id + '">删除</button>';
+  div.innerHTML = '<div class="task-item-header"><span class="task-item-title">' + escHtml(t.title) + '</span><div class="task-item-meta"><span class="task-badge ' + statusClass + '">' + statusLabel + '</span><span class="task-badge ' + priClass + '">' + priLabel + '</span></div></div>' + descHtml + '<div class="task-item-footer"><span>' + escHtml(t.assignee) + '</span><span>' + (t.created_at || '').slice(0, 16) + '</span><div class="task-item-actions">' + actions + '</div></div>';
+  div.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (btn.classList.contains('btn-start')) { await patchTask(id, { status: 'in_progress' }); }
+      else if (btn.classList.contains('btn-complete')) { await patchTask(id, { status: 'completed' }); }
+      else if (btn.classList.contains('btn-cancel')) { await patchTask(id, { status: 'cancelled' }); }
+      else if (btn.classList.contains('btn-delete')) { if (!confirm('确定删除此任务？')) return; await deleteTask(id); }
+    });
+  });
+  return div;
+}
+
+async function patchTask(id, patch) {
+  try {
+    const res = await fetch(API_BASE + 'api/tasks/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(await res.text());
+    await loadTasks();
+  } catch (e) { alert('操作失败: ' + e.message); }
+}
+
+async function deleteTask(id) {
+  try {
+    const res = await fetch(API_BASE + 'api/tasks/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    await loadTasks();
+  } catch (e) { alert('删除失败: ' + e.message); }
+}
+
+async function createTask() {
+  const title = document.getElementById('task-new-title').value.trim();
+  const desc = document.getElementById('task-new-desc').value.trim();
+  const assignee = document.getElementById('task-new-assignee').value;
+  const priority = document.getElementById('task-new-priority').value;
+  if (!title) { alert('标题不能为空'); return; }
+  if (!assignee) { alert('请选择负责人'); return; }
+  try {
+    const res = await fetch(API_BASE + 'api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description: desc, assignee, priority }) });
+    if (!res.ok) throw new Error(await res.text());
+    document.getElementById('task-create-form').classList.add('hidden');
+    document.getElementById('task-new-title').value = '';
+    document.getElementById('task-new-desc').value = '';
+    await loadTasks();
+  } catch (e) { alert('创建失败: ' + e.message); }
+}
+
+function setupTaskPanel() {
+  const menu = document.getElementById('panel-menu');
+  const taskPanel = document.getElementById('task-panel');
+  const taskClose = document.getElementById('task-panel-close');
+  const menuTask = document.getElementById('menu-task-mgmt');
+  const btnNew = document.getElementById('task-btn-new');
+  const btnRefresh = document.getElementById('task-btn-refresh');
+  const form = document.getElementById('task-create-form');
+  const submitBtn = document.getElementById('task-create-submit');
+  const cancelBtn = document.getElementById('task-create-cancel');
+  if (menuTask) { menuTask.addEventListener('click', () => { menu.classList.add('hidden'); taskPanel && taskPanel.classList.remove('hidden'); loadTaskAgents(); loadTasks(); }); }
+  if (taskClose) { taskClose.addEventListener('click', () => taskPanel && taskPanel.classList.add('hidden')); }
+  if (btnNew) { btnNew.addEventListener('click', () => { form && form.classList.toggle('hidden'); if (form && !form.classList.contains('hidden')) loadTaskAgents(); }); }
+  if (btnRefresh) { btnRefresh.addEventListener('click', loadTasks); }
+  if (submitBtn) { submitBtn.addEventListener('click', createTask); }
+  if (cancelBtn) { cancelBtn.addEventListener('click', () => form && form.classList.add('hidden')); }
+}
+
+// ESC 关闭所有面板
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  ['agent-panel', 'doc-panel', 'task-panel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
+  });
+  const menu = document.getElementById('panel-menu');
+  if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
+});
