@@ -145,7 +145,10 @@ async function loadAgentStatus() {
       const name = a.name || '';
       const dot = document.createElement('span');
       dot.className = 'status-dot';
-      if (a.status === 'working') {
+      if (a.thinking) {
+        dot.classList.add('thinking');
+        dot.textContent = name + '·思考中';
+      } else if (a.status === 'working') {
         dot.classList.add('working');
         dot.textContent = name + '·处理中';
       } else if (a.has_unread) {

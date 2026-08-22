@@ -187,6 +187,27 @@ def derive_state(a, now=None):
     return "online"
 
 
+# 思考状态阈值：在线 + working + 距上次心跳 > N 秒 → 视为"正在思考中"
+# 5s 足够覆盖轮询间隔（loop.py 默认 3s），又不会误触发短静默。
+THINKING_THRESHOLD_SECONDS = 5
+
+
+def derive_thinking_status(a, now=None):
+    """纯函数推导 thinking 状态（仅接口输出，不落盘）。
+
+    判定：presence==online AND status==working AND last_seen 距今 > THINKING_THRESHOLD_SECONDS
+    → 表示 agent 当前没在拉消息（不是 working 的即时心跳），而是在"思考"/生成回复中。
+    """
+    if derive_state(a, now) != "online":
+        return False
+    if a.get("status") != "working":
+        return False
+    age = _age_of(a.get("last_seen"), now)
+    if age is None:
+        return False
+    return age > THINKING_THRESHOLD_SECONDS
+
+
 def _should_delete(a, now=None):
     """删除判定：① 占位从未活动（注册后超 ZOMBIE_GRACE_SECONDS 仍 last_seen==registered_at）；
     ② 离线/失联超保留期（last_seen 距今 > LOST_TIMEOUT + LOST_GRACE_BEFORE_DELETE = 6h20min）。"""
@@ -339,7 +360,7 @@ def set_session(name, active):
 
 
 def get_agent_statuses():
-    """返回所有 Agent 状态，含派生 presence 字段（online/lost/offline，仅接口输出，不落盘）。"""
+    """返回所有 Agent 状态，含派生 presence + thinking 字段（仅接口输出，不落盘）。"""
     agents = load_agents()
     result = []
     for a in agents:
@@ -349,6 +370,7 @@ def get_agent_statuses():
             "status": a.get("status", "waiting"),
             "session": a.get("session", False),
             "presence": derive_state(a),
+            "thinking": derive_thinking_status(a),
         })
     return result
 

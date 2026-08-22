@@ -61,6 +61,7 @@ html, body {
 }
 .status-dot.working { background: #E8F4FD; color: #2AABEE; }
 .status-dot.waiting { background: #FFF4E1; color: #E08A00; }
+.status-dot.thinking { background: #F3E8FD; color: #8B5CF6; }
 .status-dot.idle { background: #f0f0f0; color: #999; }
 
 #message-list {
