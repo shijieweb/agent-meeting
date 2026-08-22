@@ -824,3 +824,19 @@ html, body {
 .task-item-actions .btn-complete:hover { background: #bad8c0; }
 .task-item-actions .btn-delete { background: #ffebe9; border-color: #ff8182; color: #cf222e; }
 .task-item-actions .btn-delete:hover { background: #ffced1; }
+
+/* R9: 未读徽标样式 */
+.unread-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; font-size: 11px; font-weight: 700;
+  background: #ff4d4f; color: #fff; margin-left: 4px;
+  vertical-align: middle; line-height: 1;
+}
+.unread-badge-header {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; font-size: 10px; font-weight: 700;
+  background: #ff4d4f; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}

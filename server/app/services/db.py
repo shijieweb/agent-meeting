@@ -65,7 +65,10 @@ def init_db():
             session        INTEGER NOT NULL DEFAULT 0,
             token_hash     TEXT,
             description    TEXT    NOT NULL DEFAULT '',
-            read_scope     TEXT    NOT NULL DEFAULT 'all'
+            read_scope     TEXT    NOT NULL DEFAULT 'all',
+            role           TEXT    NOT NULL DEFAULT 'general',
+            capabilities   TEXT    NOT NULL DEFAULT '[]',
+            team           TEXT    NOT NULL DEFAULT ''
         )
         """
     )
@@ -84,7 +87,8 @@ def init_db():
             message_type        TEXT,
             event               TEXT,
             created_at          TEXT    NOT NULL,
-            client_msg_id       TEXT
+            client_msg_id       TEXT,
+            workflow_id         TEXT
         )
         """
     )

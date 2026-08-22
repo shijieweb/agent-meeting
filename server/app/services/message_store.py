@@ -395,6 +395,51 @@ def agent_has_unread(name):
     return False
 
 
+def agent_unread_count(name):
+    """R9：返回该 agent 的未读消息数（只读不写）。
+
+    与 agent_has_unread 逻辑一致，但返回数字而非布尔。
+    """
+    msgs = load_messages()
+    if not agent_read_set_exists(name):
+        seed = {
+            r["message_id"]
+            for r in load_reads()
+            if r.get("agent_name") == name and r.get("read_at") is not None
+        }
+        read_set = seed
+    else:
+        read_set = load_agent_read_set(name)
+    count = 0
+    for msg in msgs:
+        if msg.get("sender_type") != "user":
+            continue
+        targeted = (
+            (msg.get("target_type") == "single" and msg.get("target_agent_name") == name)
+            or msg.get("target_type") == "all"
+        )
+        if not targeted:
+            continue
+        if msg["id"] not in read_set:
+            count += 1
+    return count
+
+
+def mark_reads_json(agent_name, message_ids):
+    """R9：前端主动标记消息已读（update reads.json）。幂等：已读的不重复写。"""
+    if not message_ids:
+        return
+    ids = set(message_ids)
+
+    def _mut(reads):
+        for r in reads:
+            if r["agent_name"] == agent_name and r["message_id"] in ids and r["read_at"] is None:
+                r["read_at"] = now_iso()
+        return reads
+
+    update_json_atomic(READS_FILE, [], _mut)
+
+
 def submit_reply(agent_name, content, reply_to_message_id=None, client_msg_id=None,
                  target_type=None, target_agent_name=None):
     """Agent 提交回复：保存回复，并捎带返回该 Agent 剩余未读消息。对应方案书 §5.3 submit_reply。

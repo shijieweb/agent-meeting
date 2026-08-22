@@ -12,15 +12,19 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 @router.get("/status")
 def agents_status():
-    """返回各 Agent 的 {name, last_seen, status, session, presence, has_unread}。
+    """返回各 Agent 的 {name, last_seen, status, session, presence, unread_count}。
 
     presence：online/lost/offline 派生字段（服务端权威判定，不落盘）。
     先惰性清扫（60s 节流）再读最新状态——失联自动下线、超保留期自动删除。
+    R9：unread_count 替换 has_unread（数字而非布尔）。
     """
     agent_store.scan_and_sweep()            # ① 惰性清扫先于读（节流 60s，成本≈0）
     statuses = agent_store.get_agent_statuses()
     for a in statuses:
-        a["has_unread"] = message_store.agent_has_unread(a.get("name", ""))
+        name = a.get("name", "")
+        a["unread_count"] = message_store.agent_unread_count(name)
+        # 保留 has_unread 向后兼容（前端优先读 unread_count）
+        a["has_unread"] = a["unread_count"] > 0
     return {"agents": statuses}
 
 
@@ -106,8 +110,22 @@ def manage_delete_endpoint(body: AgentManageDelete, _: None = Depends(require_wr
 
 @router.get("/manage/list")
 def manage_list_endpoint():
-    """白名单列表：返回全部 Agent（含 presence / has_unread），供 ☰ 面板渲染。"""
-    return {"agents": agent_store.manage_list()}
+    """白名单列表：返回全部 Agent（含 presence / unread_count），供 ☰ 面板渲染。"""
+    agents = agent_store.manage_list()
+    for a in agents:
+        a["unread_count"] = message_store.agent_unread_count(a.get("name", ""))
+        a["has_unread"] = a["unread_count"] > 0
+    return {"agents": agents}
+
+
+@router.get("/unread")
+def unread_counts():
+    """R9：批量返回所有在线 agent 的未读数 {name: count}。供前端 header 徽标使用。"""
+    names = agent_store.list_active_agent_names()
+    result = {}
+    for name in names:
+        result[name] = message_store.agent_unread_count(name)
+    return {"unread_counts": result}
 
 
 @router.patch("/manage/update")

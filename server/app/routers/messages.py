@@ -82,6 +82,19 @@ class MessageCleanup(BaseModel):
     older_than: Optional[str] = None
 
 
+@router.post("/mark-read")
+def mark_read(body: dict, _: None = Depends(require_write_auth)):
+    """R9：批量标记消息已读。请求体 {agent_name, message_ids: [str]}。"""
+    agent_name = body.get("agent_name")
+    message_ids = body.get("message_ids", [])
+    if not agent_name:
+        raise HTTPException(status_code=400, detail="agent_name required")
+    if not isinstance(message_ids, list):
+        raise HTTPException(status_code=400, detail="message_ids must be a list")
+    message_store.mark_reads_json(agent_name, message_ids)
+    return {"status": "ok", "marked": len(message_ids)}
+
+
 @router.post("/cleanup")
 def cleanup(body: MessageCleanup, _: None = Depends(require_write_auth)):
     """F12 归档：按条数/时间清理 messages.json（删除式归档，archived=移除条数）。

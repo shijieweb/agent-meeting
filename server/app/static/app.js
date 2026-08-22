@@ -93,6 +93,7 @@ async function init() {
   await loadInitialPage();      // 首屏只取一页（?limit=30），取代全量 loadHistory
   await loadAgentStatus();
   setupPanel();                 // F-e / §3.5：☰ 面板（事件绑定 + 列表渲染）
+  setupUnreadObserver();        // R9：IntersectionObserver 自动标已读
   setInterval(loadAgentStatus, 3000); // presence：状态栏 ≤5s 刷新（拍板 + PRD §2.5）
   setInterval(pollNew, 2000);   // 每2秒增量轮询（带 since_id / 空会议室降级 limit）
   setInterval(refreshReadReceipts, 5000); // 每5秒同步已读回执，刷新已渲染消息的 ✓/○ 徽标
@@ -160,6 +161,15 @@ async function loadAgentStatus() {
       } else {
         dot.classList.add('waiting');
         dot.textContent = name + '·待命中';
+      }
+      // R9: 未读数徽标（仅显示 >0 的情况）
+      const uc = a.unread_count || 0;
+      if (uc > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'unread-badge';
+        badge.textContent = uc > 99 ? '99+' : String(uc);
+        badge.title = uc + ' 条未读消息';
+        dot.appendChild(badge);
       }
       // 角色标签（小 badge）
       const roleSpan = document.createElement('span');
@@ -262,6 +272,8 @@ async function pollNew() {
     });
     // 轮询游标只由服务端返回的消息推进，乐观发送不推进（BUG-C 修复：不丢更早的 agent 回复）
     if (lastServerId !== null) pollCursorId = lastServerId;
+    // R9: 检测新消息并更新未读数徽标
+    if (msgs.length > 0) checkUnreadOnPoll(msgs);
     // 非底部时弹浮动提示，N = 本次实际新增条数（AC-3.1）；底部不弹（AC-3.4）
     if (!atBottomBefore && newCount > 0) {
       showNewMessageBanner(newCount);
@@ -1508,3 +1520,142 @@ document.addEventListener('keydown', e => {
   const menu = document.getElementById('panel-menu');
   if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
 });
+
+// R9: 总未读数徽标
+function updateHeaderUnreadBadge(count) {
+  const badge = document.getElementById('header-unread-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.classList.remove('hidden');
+    badge.title = count + ' 条未读消息';
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+// R9: 批量标记消息已读（调服务端）
+async function markMessagesRead(messageIds, agentName) {
+  if (!messageIds || messageIds.length === 0) return;
+  try {
+    await fetch(API_BASE + 'api/messages/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name: agentName, message_ids: messageIds }),
+    });
+  } catch (e) { /* 失败不阻断 */ }
+}
+
+// R9: IntersectionObserver 检测消息是否进入视口并自动标已读
+let unreadMsgIdsInViewport = new Set(); // 在视口内的未读消息 id
+let intersectionObserver = null;
+
+function setupUnreadObserver() {
+  const list = document.getElementById('message-list');
+  if (!list) return;
+  if (intersectionObserver) intersectionObserver.disconnect();
+  
+  // 观察所有消息气泡
+  const observeMessage = (msgEl, msgId) => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          // 进入视口 >50% 时标已读
+          if (unreadMsgIdsInViewport.has(msgId)) {
+            unreadMsgIdsInViewport.delete(msgId);
+            // 乐观更新本地徽标
+            updateLocalUnreadBadge(-1);
+            // 异步通知服务端
+            markMessagesRead([msgId], currentAgentName);
+          }
+        }
+      });
+    }, { root: list, threshold: 0.5 });
+    observer.observe(msgEl);
+    return observer;
+  };
+  
+  // 保存观察器以便后续清理
+  window._messageObservers = window._messageObservers || new Map();
+  
+  // 监听消息添加
+  const MutationObserver = window.MutationObserver || window.WebkitMutationObserver;
+  if (MutationObserver) {
+    const mutObs = new MutationObserver((mutations) => {
+      mutations.forEach(mutation => {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === 1 && node.classList && node.classList.contains('msg-row')) {
+            const msgId = node.dataset.id;
+            if (msgId) {
+              const obs = observeMessage(node, msgId);
+              window._messageObservers.set(msgId, obs);
+              // 初始检查是否已在视口
+              const rect = node.getBoundingClientRect();
+              const listRect = list.getBoundingClientRect();
+              if (rect.top < listRect.bottom && rect.bottom > listRect.top) {
+                unreadMsgIdsInViewport.delete(msgId);
+                updateLocalUnreadBadge(-1);
+                markMessagesRead([msgId], currentAgentName);
+              } else {
+                unreadMsgIdsInViewport.add(msgId);
+              }
+            }
+          }
+        });
+      });
+    });
+    mutObs.observe(list, { childList: true, subtree: true });
+    window._mutObserver = mutObs;
+  }
+}
+
+// R9: 更新本地未读数徽标（乐观更新）
+function updateLocalUnreadBadge(delta) {
+  const badge = document.getElementById('header-unread-badge');
+  if (!badge) return;
+  let count = parseInt(badge.textContent) || 0;
+  count = Math.max(0, count + delta);
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+// R9: 替换旧 refreshReadReceipts（每5秒 polling 改事件驱动）
+async function refreshReadReceipts() {
+  // 仅用于刷新已渲染消息的 read_by 状态（来自服务端轮询）
+  if (readStatusNodes.size === 0) return;
+  try {
+    const res = await fetch(API_BASE + 'api/messages/history?limit=200');
+    const data = await res.json();
+    (data.messages || []).forEach(msg => {
+      if (!insertedIds.has(msg.id)) return;
+      const st = readStatusNodes.get(msg.id);
+      if (!st) return;
+      const sig = (msg.read_by || []).join(',');
+      if (st._readSig === sig) return;
+      st._readSig = sig;
+      paintReadStatus(msg, st);
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// 全局变量
+let _headerUnreadCount = 0;
+
+// R9: 轮询时检查新消息并更新徽标
+async function checkUnreadOnPoll(newMessages) {
+  if (!newMessages || newMessages.length === 0) return;
+  // R9: 统计 agent 发的新消息（boss 待读），user 消息不计入未读
+  const agentMsgs = newMessages.filter(m => m.sender_type === 'agent' && !insertedIds.has(m.id));
+  if (agentMsgs.length === 0) return;
+  updateHeaderUnreadBadge(agentMsgs.length);
+  const list = document.getElementById('message-list');
+  if (list) {
+    agentMsgs.forEach(msg => {
+      unreadMsgIdsInViewport.add(msg.id);
+    });
+  }
+}
