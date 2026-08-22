@@ -11,12 +11,20 @@ def setup():
     os.environ['DATA_DIR'] = tmp
     os.environ['SWEEP_INTERVAL'] = '0'
     from app.services import db as main_db
+    # 清除单例连接，强制重建
+    if hasattr(main_db, '_CONN') and main_db._CONN:
+        main_db._CONN.close()
+        main_db._CONN = None
     main_db.init_db()
-    conn = sqlite3.connect(os.path.join(tmp, 'agent_meeting.db'))
+    # 使用 init_db 创建的连接插入数据
+    conn = main_db.get_conn()
     now = time.strftime('%Y-%m-%dT%H:%M:%S')
     for name in ['boss', 'agent_a']:
-        conn.execute('INSERT INTO agents (name, registered_at, status, token_hash) VALUES (?, ?, ?, ?)', (name, now, 'offline', 'x'))
-    conn.commit(); conn.close()
+        try:
+            conn.execute('INSERT INTO agents (name, registered_at, status, token_hash) VALUES (?, ?, ?, ?)', (name, now, 'offline', 'x'))
+        except:
+            pass  # 已存在则跳过
+    conn.commit()
     from app.services import message_store
     return tmp, message_store
 
