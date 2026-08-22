@@ -8,6 +8,7 @@
   失联(session=true 超 LOST_TIMEOUT) → 置 offline；离线/失联超保留期 → 删除记录 + 删 agent_read_<name>.json。
 - register 同名：在线幂等（reactivated=false）；失联/离线 → 唤醒重置（reactivated=true）。
 """
+import json
 import threading
 import time
 
@@ -457,16 +458,26 @@ def manage_update(name, description=None, read_scope=None):
 
 
 def manage_list():
-    """白名单列表：返回全部 Agent（含 presence / has_unread）。
+    """白名单列表：返回全部 Agent（含 presence / has_unread / role / capabilities / team）。
 
     presence：derive_state 派生（online/lost/offline）；
     has_unread：message_store.agent_has_unread（局部导入避免与 message_store→agent_store 循环依赖）。
+    role/capabilities/team：新协作字段，缺失时返回默认值（general/[]/''）。
     """
     from .message_store import agent_has_unread
     agents = load_agents()
     result = []
     for a in agents:
         name = a.get("name")
+        # 新协作字段回退兼容：缺失时给默认值
+        role = a.get("role", "general") or "general"
+        try:
+            capabilities = json.loads(a.get("capabilities", "[]"))
+            if not isinstance(capabilities, list):
+                capabilities = []
+        except (ValueError, TypeError):
+            capabilities = []
+        team = a.get("team") or ""
         result.append({
             "name": name,
             "description": a.get("description", ""),
@@ -477,5 +488,8 @@ def manage_list():
             "registered_at": a.get("registered_at"),
             "presence": derive_state(a),
             "has_unread": agent_has_unread(name),
+            "role": role,
+            "capabilities": capabilities,
+            "team": team,
         })
     return result

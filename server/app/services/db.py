@@ -189,7 +189,7 @@ def read_table_as_list(name, default):
     if kind == "agents":
         rows = conn.execute(
             "SELECT name, registered_at, last_seen, status, session, token_hash, "
-            "description, read_scope FROM agents ORDER BY name"
+            "description, read_scope, role, capabilities, team FROM agents ORDER BY name"
         ).fetchall()
         return [
             {
@@ -201,6 +201,9 @@ def read_table_as_list(name, default):
                 "token_hash": r["token_hash"],
                 "description": r["description"],
                 "read_scope": r["read_scope"],
+                "role": r["role"] or "general",
+                "capabilities": r["capabilities"] or "[]",
+                "team": r["team"] or "",
             }
             for r in rows
         ]
@@ -208,7 +211,7 @@ def read_table_as_list(name, default):
         rows = conn.execute(
             "SELECT id, seq, content, sender_type, sender_agent_name, target_type, "
             "target_agent_name, reply_to_message_id, visible, message_type, event, "
-            "created_at, client_msg_id FROM messages ORDER BY seq"
+            "created_at, client_msg_id, workflow_id FROM messages ORDER BY seq"
         ).fetchall()
         out = []
         for r in rows:
@@ -223,6 +226,9 @@ def read_table_as_list(name, default):
                 "client_msg_id": r["client_msg_id"],
                 "read_by": [],   # 死字段（坑9）：读回恒补 []，前端由 reads 实时算
             }
+            # T-collab-01: 新协作字段 workflow_id
+            if r["workflow_id"] is not None:
+                d["workflow_id"] = r["workflow_id"]
             if r["reply_to_message_id"] is not None:
                 d["reply_to_message_id"] = r["reply_to_message_id"]
             if r["visible"] is not None:

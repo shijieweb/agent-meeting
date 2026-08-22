@@ -267,21 +267,12 @@ def maybe_generate_ack(orig_msg, receiver_name):
     update_json_atomic(MESSAGES_FILE, [], _add)
 
 
-def pull_messages(agent_name):
+def pull_messages(agent_name, workflow_id=None):
     """Agent 拉取@自己且未读的消息，并标记为已读。对应方案书 §5.3 pull_messages。
 
-    未读判断由服务端完成（per-agent 已读集合 agent_read_<X>.json）：
-    - 读入该 agent 已读 id 集合，过滤掉已读 -> 仅剩未读；
-    - 在 update_json_atomic 锁内把本次返回的未读 id 写入已读集合（read-modify-write 原子），
-      满足 §7 T-PULL-05（并发拉取同一条消息只会被一个 Agent 领取）；
-    - 同时更新 reads.json 回执的 read_at，供前端「✓已读 / N/N」展示。
-    客户端只透传结果，不再做 seen.json 去重。
-
-    F4+F5（P1，design 1.4 二选一决策=首拉过滤 + 种子迁移锁内化合并）：
-    - 种子迁移（读已读回执 + 注册前 @all 历史 id）整体移入 update_json_atomic mutator 内，
-      消除原「锁外 exists 判断 + save_agent_read_set」的 TOCTOU 竞态（并发首拉不重复投递）；
-    - 首拉过滤：新 agent 注册前已存在的历史 @all 消息视为已读（created_at < registered_at），
-      不回灌给新 agent；registered_at 缺失（极端老数据）→ 不过滤，退化为现状（保守不误伤）。
+    workflow_id（T-collab-01 新协作功能）：
+    - 若指定，则仅返回 workflow_id 匹配的消息（用于隔离工作流上下文）
+    - 若为 None，返回所有相关消息（原有行为）
     """
     msgs = load_messages()
     read_holder = {}
@@ -317,7 +308,14 @@ def pull_messages(agent_name):
                 my_read_scope = a.get("read_scope", "all")
                 break
         unread = []
-        for msg in msgs:
+
+        # T-collab-01：按 workflow_id 过滤（可选）
+        if workflow_id is not None:
+            candidate_msgs = [m for m in msgs if m.get("workflow_id") == workflow_id]
+        else:
+            candidate_msgs = msgs
+
+        for msg in candidate_msgs:
             st = msg.get("sender_type")
             # F-d 自动确认系统消息透传：仅「发给本 agent 且 visible==0」的 ack 返回给本 agent
             # （presence_event 无 visible 字段 → 不命中，仍按原逻辑跳过）
@@ -360,6 +358,7 @@ def pull_messages(agent_name):
         # 服务端持久化已读：per-agent 集合（已写入）+ reads.json 回执（前端展示）
         _mark_reads_json(agent_name, [m["id"] for m in unread])
     record_pull(agent_name, len(unread) > 0)  # pull 即心跳：刷新 last_seen + 状态(拉到数据=working / 没拉到=waiting)
+    return unread
     return unread
 
 
