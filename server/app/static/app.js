@@ -116,6 +116,7 @@ async function init() {
     list.addEventListener('scroll', onListScroll);
   }
   setupKeyboardHandling();  // EXT-2：移动端输入法遮挡处理
+  setupMobileOptimizations(); // R7：移动端触摸优化
   setupAttachmentPreview(); // R10：图片点击放大预览
   const mi = document.getElementById('message-input');
   if (mi) {
@@ -1791,5 +1792,39 @@ function setupAuditPanel() {
   
   if (filterAction) {
     filterAction.addEventListener('change', loadAuditList);
+  }
+}
+
+// R7: 移动端优化 - 触摸友好
+function setupMobileOptimizations() {
+  // 移动端触摸优化：增大点击区域
+  if (IS_MOBILE) {
+    // 为所有按钮添加触摸反馈
+    const buttons = document.querySelectorAll('button, .doc-btn, .panel-menu-item');
+    buttons.forEach(btn => {
+      btn.addEventListener('touchstart', function() {
+        this.classList.add('touch-active');
+      }, { passive: true });
+      btn.addEventListener('touchend', function() {
+        this.classList.remove('touch-active');
+      }, { passive: true });
+    });
+    
+    // 消息列表触摸滚动优化
+    const list = document.getElementById('message-list');
+    if (list) {
+      list.style.webkitOverflowScrolling = 'touch';
+    }
+    
+    // 面板触摸关闭（点击外部关闭）
+    const panels = document.querySelectorAll('.agent-panel, .doc-panel, .task-panel, .audit-panel');
+    panels.forEach(panel => {
+      panel.addEventListener('click', function(e) {
+        // 点击面板内部不关闭
+        if (e.target === panel) {
+          panel.classList.add('hidden');
+        }
+      });
+    });
   }
 }
