@@ -940,18 +940,38 @@ runWhenReady(function () {
    presence 类（init/end/lost/reactivated）无害，直接 textContent。
    URL 白名单：http(s):// 开头，否则当纯文本，防 javascript: XSS。
    ================================================================ */
+// R6: 文档联动 - 点击文档链接直接在会话内打开
+let docLinkCounter = 0;
 function renderSystemContent(msg) {
   // presence 类（无 message_type 或非 doc_event）：纯文本
   if (!msg || msg.message_type !== 'doc_event') {
     return escapeHtml(msg && msg.content ? msg.content : '');
   }
   const content = msg.content || '';
-  // 匹配 [text](url) 链接
-  return escapeHtml(content).replace(
+  // 匹配 [text](url) 链接，生成唯一 id
+  docLinkCounter++;
+  const uniqueId = 'doc-link-' + docLinkCounter;
+  const html = content.replace(
     /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    function(m, text, url) {
+      const docId = url.split('/').pop();
+      return '<a href="#" class="doc-event-link" data-doc-id="' + docId + '">' + escapeHtml(text) + '</a>';
+    }
   );
+  return '<span class="doc-event-content" id="' + uniqueId + '">' + html + '</span>';
 }
+// R6: 从系统消息点击打开文档（通过事件委托）
+document.addEventListener('click', function(e) {
+  const link = e.target.closest('.doc-event-link');
+  if (link) {
+    e.preventDefault();
+    e.stopPropagation();
+    const docId = link.getAttribute('data-doc-id');
+    if (docId && typeof openDoc === 'function') {
+      openDoc(docId, false);
+    }
+  }
+});
 
 /* ================================================================
    ☰ 下拉菜单 + 文档管理面板（design v2.5 §六 / AC-1~22）
@@ -1701,15 +1721,15 @@ function renderAuditItem(action) {
   const icon = icons[action.action] || '📋';
   const time = action.created_at ? action.created_at.slice(0, 16) : '';
   
-  div.innerHTML = \`
-    <span class="audit-icon">\${icon}</span>
+  div.innerHTML = `
+    <span class="audit-icon">${icon}</span>
     <div class="audit-content">
-      <div class="audit-actor">\${action.actor || 'system'}</div>
-      <div class="audit-action">\${action.action}</div>
-      <div class="audit-summary">\${action.summary || ''}</div>
+      <div class="audit-actor">${action.actor || 'system'}</div>
+      <div class="audit-action">${action.action}</div>
+      <div class="audit-summary">${action.summary || ''}</div>
     </div>
-    <span class="audit-time">\${time}</span>
-  \`;
+    <span class="audit-time">${time}</span>
+  `;
   return div;
 }
 

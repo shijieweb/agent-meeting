@@ -915,3 +915,29 @@ html, body {
 .audit-action { font-size: 12px; color: #57606a; margin: 2px 0; }
 .audit-summary { font-size: 13px; color: #24292f; }
 .audit-time { font-size: 11px; color: #8c959f; white-space: nowrap; }
+
+/* R6: 文档联动消息样式 */
+.doc-event-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #ddf4ff;
+  border: 1px solid #54aeff;
+  border-radius: 4px;
+  color: #0969da;
+  text-decoration: none;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.doc-event-link:hover {
+  background: #b6e3ff;
+}
+.doc-event-content {
+  display: inline;
+}
+.sys-notice.doc-event {
+  background: #fff8cc;
+  border-left: 3px solid #9a6700;
+}
