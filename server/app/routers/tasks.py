@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from app.auth import require_write_auth
 from app.services import agent_store, message_store
 from app.services.collab_db import CollabDB
+from app.services.board_sync import sync_task_to_board
 from app.config import DATA_DIR
 
 logger = logging.getLogger("am_tasks")
@@ -141,6 +142,12 @@ def update_task(task_id: str, body: TaskUpdate, _: None = Depends(require_write_
         # 状态变更通知
         if body.status == "completed":
             _notify_agent(task["assignee"], f"任务已完成: {task['title']}")
+            # 同步到 shared_board 看板（异步失败不影响主流程）
+            try:
+                wf_id = task.get("workflow_id") or task.get("project_id")
+                sync_task_to_board(task, project_id=int(wf_id) if wf_id else None)
+            except Exception as e:
+                logger.warning("board sync skipped: %s", e)
         elif body.status == "in_progress":
             _notify_agent(task["assignee"], f"开始处理: {task['title']}")
 
