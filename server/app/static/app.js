@@ -143,8 +143,11 @@ async function loadAgentStatus() {
     (data.agents || []).forEach(a => {
       if (!isOnline(a)) return;   // 离线/失联不显示
       const name = a.name || '';
+      const role = a.role || 'general';
+      const team = a.team || '';
       const dot = document.createElement('span');
       dot.className = 'status-dot';
+      // 状态标签
       if (a.thinking) {
         dot.classList.add('thinking');
         dot.textContent = name + '·思考中';
@@ -157,6 +160,22 @@ async function loadAgentStatus() {
       } else {
         dot.classList.add('waiting');
         dot.textContent = name + '·待命中';
+      }
+      // 角色标签（小 badge）
+      const roleSpan = document.createElement('span');
+      roleSpan.className = 'role-badge';
+      roleSpan.textContent = role.toUpperCase();
+      roleSpan.title = '角色: ' + role;
+      // Team 标签（如有）
+      if (team) {
+        const teamSpan = document.createElement('span');
+        teamSpan.className = 'team-badge';
+        teamSpan.textContent = team;
+        teamSpan.title = '团队: ' + team;
+        dot.appendChild(roleSpan);
+        dot.appendChild(teamSpan);
+      } else {
+        dot.appendChild(roleSpan);
       }
       container.appendChild(dot);
     });
