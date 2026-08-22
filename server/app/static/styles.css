@@ -840,3 +840,58 @@ html, body {
   background: #ff4d4f; color: #fff;
   display: flex; align-items: center; justify-content: center;
 }
+
+/* R10: 附件内嵌预览样式 */
+.attachment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #24292f;
+  background: #f6f8fa;
+  margin: 4px 0;
+  transition: background 0.2s;
+}
+.attachment-link:hover {
+  background: #eaeef2;
+}
+.attachment-img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.attachment-img:hover {
+  transform: scale(1.02);
+}
+.attachment-icon {
+  font-size: 24px;
+}
+.attachment-name {
+  font-size: 13px;
+  color: #57606a;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 图片大图预览遮罩 */
+.attachment-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  cursor: zoom-out;
+}
+.attachment-overlay img {
+  max-width: 90%;
+  max-height: 90%;
+  border-radius: 8px;
+}

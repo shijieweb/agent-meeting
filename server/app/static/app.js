@@ -63,7 +63,20 @@ function genTempId() {
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+function renderAttachmentLink(url, text) {
+  const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
+  const isPdf = url.toLowerCase().endsWith('.pdf');
+  if (isImage) {
+    return '<a href="' + url + '" class="attachment-link attachment-image" data-type="image"><img src="' + url + '" alt="' + escapeHtml(text) + '" class="attachment-img" /></a>';
+  } else if (isPdf) {
+    return '<a href="' + url + '" class="attachment-link attachment-pdf" data-type="pdf"><span class="attachment-icon">📄</span><span class="attachment-name">' + escapeHtml(text) + '</span></a>';
+  }
+  return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(text) + '</a>';
+}
 function inlineMd(t) {
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, function(m, text, url) {
+    return renderAttachmentLink(url, text);
+  });
   return t.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
 function renderMarkdown(src) {
@@ -103,6 +116,7 @@ async function init() {
     list.addEventListener('scroll', onListScroll);
   }
   setupKeyboardHandling();  // EXT-2：移动端输入法遮挡处理
+  setupAttachmentPreview(); // R10：图片点击放大预览
   const mi = document.getElementById('message-input');
   if (mi) {
     mi.addEventListener('input', autoGrowInput);  // EXT-3：输入时自动增高
